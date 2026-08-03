@@ -7,12 +7,8 @@ import {
   CheckCircle2,
   ChevronRight,
   CircleDot,
-  Clock3,
-  Code2,
   FileCode2,
   FolderGit2,
-  Gauge,
-  GitBranch,
   Home,
   Layers3,
   Moon,
@@ -28,6 +24,7 @@ import {
   X,
 } from 'lucide-react'
 import type { ComponentKind, ComponentTemplate, ProjectContext } from '../types/workflow'
+import type { PendingRun, WorkflowRecord, WorkflowTemplate } from '../types/catalog'
 
 export type AppPage = 'dashboard' | 'builder' | 'workflows' | 'components' | 'projects' | 'templates' | 'runs'
 
@@ -40,6 +37,11 @@ interface ManagementProps {
   onCreateComponent: (component: ComponentTemplate) => void
   theme: 'dark' | 'light'
   onToggleTheme: () => void
+  workflows: WorkflowRecord[]
+  templates: WorkflowTemplate[]
+  onCreateTemplate: (template: WorkflowTemplate) => void
+  onToggleTemplatePublished: (id: string) => void
+  pendingRun: PendingRun | null
 }
 
 const pageLabels: Record<Exclude<AppPage, 'builder'>, string> = {
@@ -69,6 +71,11 @@ export function Management({
   onCreateComponent,
   theme,
   onToggleTheme,
+  workflows,
+  templates,
+  onCreateTemplate,
+  onToggleTemplatePublished,
+  pendingRun,
 }: ManagementProps) {
   return (
     <main className="app-shell management-shell">
@@ -107,12 +114,12 @@ export function Management({
           </div>
         </aside>
         <section className="management-content">
-          {page === 'dashboard' && <Dashboard onNavigate={onNavigate} project={project} components={components} />}
-          {page === 'workflows' && <WorkflowsPage onNavigate={onNavigate} />}
+          {page === 'dashboard' && <Dashboard onNavigate={onNavigate} project={project} components={components} workflows={workflows} />}
+          {page === 'workflows' && <WorkflowsPage onNavigate={onNavigate} workflows={workflows} />}
           {page === 'components' && <ComponentsPage components={components} onCreate={onCreateComponent} />}
           {page === 'projects' && <ProjectsPage project={project} onUpdate={onUpdateProject} />}
-          {page === 'templates' && <TemplatesPage onNavigate={onNavigate} />}
-          {page === 'runs' && <RunsPage onNavigate={onNavigate} />}
+          {page === 'templates' && <TemplatesPage onNavigate={onNavigate} templates={templates} onCreate={onCreateTemplate} onTogglePublished={onToggleTemplatePublished} />}
+          {page === 'runs' && <RunsPage onNavigate={onNavigate} pendingRun={pendingRun} />}
         </section>
       </div>
     </main>
@@ -132,7 +139,8 @@ function PageHeading({ eyebrow, title, description, action }: { eyebrow: string;
   )
 }
 
-function Dashboard({ onNavigate, project, components }: { onNavigate: (page: AppPage) => void; project: ProjectContext; components: ComponentTemplate[] }) {
+function Dashboard({ onNavigate, project, components, workflows }: { onNavigate: (page: AppPage) => void; project: ProjectContext; components: ComponentTemplate[]; workflows: WorkflowRecord[] }) {
+  const projectConnected = Boolean(project.root)
   return (
     <div className="page-wrap">
       <PageHeading
@@ -142,49 +150,25 @@ function Dashboard({ onNavigate, project, components }: { onNavigate: (page: App
         action={<button className="primary-cta" onClick={() => onNavigate('builder')}><Plus size={16} /> Create workflow</button>}
       />
 
-      <div className="metrics-grid">
-        <Metric label="Workflows" value="3" detail="1 ready to run" icon={Workflow} />
-        <Metric label="Components" value={String(components.length)} detail="2 customized" icon={Blocks} />
-        <Metric label="Successful runs" value="94%" detail="Last 30 days" icon={CheckCircle2} />
-        <Metric label="Time saved" value="6.4h" detail="This week" icon={Clock3} />
+      <div className="metrics-grid metrics-grid-three">
+        <Metric label="Workflows" value={String(workflows.length)} detail="Saved in this workspace" icon={Workflow} />
+        <Metric label="Components" value={String(components.length)} detail="Markdown definitions available" icon={Blocks} />
+        <Metric label="Connected projects" value={projectConnected ? '1' : '0'} detail={projectConnected ? project.name : 'Connect a local repository'} icon={FolderGit2} />
       </div>
 
-      <div className="dashboard-grid">
-        <section className="surface getting-started-card">
-          <div className="surface-heading">
-            <div><span className="eyebrow">Guided setup</span><h2>Your first dependable workflow</h2></div>
-            <span className="progress-pill">2 of 4</span>
-          </div>
-          <div className="setup-steps">
-            <SetupStep done number="1" title="Connect a project" detail={`${project.name} · ${project.branch}`} onClick={() => onNavigate('projects')} />
-            <SetupStep done number="2" title="Choose a workflow" detail="UI quality loop" onClick={() => onNavigate('workflows')} />
-            <SetupStep number="3" title="Review the instructions" detail="See exactly what each agent receives" onClick={() => onNavigate('components')} />
-            <SetupStep number="4" title="Export the assignment" detail="A single .relay.json file for your driver agent" onClick={() => onNavigate('builder')} />
-          </div>
-        </section>
-
-        <section className="surface current-workflow-card">
-          <div className="surface-heading"><div><span className="eyebrow">Ready workflow</span><h2>UI quality loop</h2></div><span className="status-chip ready"><CircleDot size={12} /> Ready</span></div>
-          <div className="mini-flow" aria-label="Implement then review, revise, and ship">
-            <span className="tone-mint"><Code2 size={15} /></span><i />
-            <span className="tone-blue"><GitBranch size={15} /></span><i />
-            <span className="tone-coral"><Gauge size={15} /></span><i />
-            <span className="tone-cyan"><CheckCircle2 size={15} /></span>
-          </div>
-          <p>Implementation fans out to code and visual review. Failed checks return with feedback; passing work becomes a PR-ready handoff.</p>
-          <div className="card-actions">
-            <button className="secondary-cta" onClick={() => onNavigate('workflows')}>View details</button>
-            <button className="primary-cta small" onClick={() => onNavigate('builder')}><Play size={13} /> Open</button>
-          </div>
-        </section>
-      </div>
-
-      <section className="surface activity-surface">
-        <div className="surface-heading"><div><span className="eyebrow">Recent activity</span><h2>Runs and changes</h2></div><button className="text-button" onClick={() => onNavigate('runs')}>View all <ArrowRight size={13} /></button></div>
-        <ActivityRow icon={CheckCircle2} tone="success" title="UI quality loop completed" detail="1 revision · 12.1k tokens · 18s" time="12m" />
-        <ActivityRow icon={Blocks} tone="blue" title="Visual judge updated to v1.1" detail="Spacing tolerance clarified" time="2h" />
-        <ActivityRow icon={FolderGit2} tone="violet" title={`${project.name} connected`} detail={project.root} time="1d" />
+      <section className="surface dashboard-workflows">
+        <div className="surface-heading"><div><span className="eyebrow">Workspace</span><h2>All workflows</h2></div><button className="text-button" onClick={() => onNavigate('workflows')}>Manage workflows <ArrowRight size={13} /></button></div>
+        <WorkflowRows workflows={workflows} onOpen={() => onNavigate('builder')} />
       </section>
+
+      {!projectConnected && <section className="surface getting-started-card dashboard-setup">
+        <div className="surface-heading"><div><span className="eyebrow">Before the first run</span><h2>Connect the workflow to a project</h2></div></div>
+        <div className="setup-steps">
+          <SetupStep number="1" title="Connect a local repository" detail="Set the root, branch, commands, and project variables" onClick={() => onNavigate('projects')} />
+          <SetupStep number="2" title="Review reusable instructions" detail="Inspect exactly what each configured agent receives" onClick={() => onNavigate('components')} />
+          <SetupStep number="3" title="Start with an objective" detail="Send a kickoff prompt and run policy to the local driver" onClick={() => onNavigate('builder')} />
+        </div>
+      </section>}
     </div>
   )
 }
@@ -197,24 +181,20 @@ function SetupStep({ done, number, title, detail, onClick }: { done?: boolean; n
   return <button className="setup-step" onClick={onClick}><span className={done ? 'done' : ''}>{done ? <CheckCircle2 size={16} /> : number}</span><div><strong>{title}</strong><small>{detail}</small></div><ChevronRight size={16} /></button>
 }
 
-function ActivityRow({ icon: Icon, tone, title, detail, time }: { icon: React.ComponentType<{ size?: number }>; tone: string; title: string; detail: string; time: string }) {
-  return <div className="activity-row"><span className={`activity-icon ${tone}`}><Icon size={15} /></span><div><strong>{title}</strong><small>{detail}</small></div><time>{time}</time></div>
+function WorkflowRows({ workflows, onOpen }: { workflows: WorkflowRecord[]; onOpen: (workflow: WorkflowRecord) => void }) {
+  if (workflows.length === 0) return <div className="table-empty"><Workflow size={20} /><strong>No workflows yet</strong><span>Create one in the builder or start from a template.</span></div>
+  return <div className="workflow-rows">{workflows.map((workflow) => <button className="workflow-row" key={workflow.id} onClick={() => onOpen(workflow)}>
+    <span className="row-icon"><Workflow size={17} /></span><div className="row-main"><strong>{workflow.name}</strong><small>{workflow.description}</small></div><span>{workflow.nodeCount} steps</span><span>{workflow.projectName ?? 'Any project'}</span><span className={`status-chip ${workflow.status}`}>{workflow.status}</span><ChevronRight size={15} />
+  </button>)}</div>
 }
 
-function WorkflowsPage({ onNavigate }: { onNavigate: (page: AppPage) => void }) {
+function WorkflowsPage({ onNavigate, workflows }: { onNavigate: (page: AppPage) => void; workflows: WorkflowRecord[] }) {
   const [query, setQuery] = useState('')
-  const workflows = [
-    { name: 'UI quality loop', summary: 'Build, parallel review, revise, and hand off.', nodes: 5, updated: '12 min ago', status: 'Ready' },
-    { name: 'Bug fix lane', summary: 'Reproduce, patch, test, and review a defect.', nodes: 6, updated: 'Yesterday', status: 'Draft' },
-    { name: 'Release confidence', summary: 'Run checks and collect human approval before publish.', nodes: 8, updated: '3 days ago', status: 'Ready' },
-  ]
-  const visibleWorkflows = workflows.filter((workflow) => `${workflow.name} ${workflow.summary}`.toLowerCase().includes(query.toLowerCase()))
+  const visibleWorkflows = workflows.filter((workflow) => `${workflow.name} ${workflow.description} ${workflow.projectName ?? ''}`.toLowerCase().includes(query.toLowerCase()))
   return <div className="page-wrap"><PageHeading eyebrow="Library" title="Workflows" description="Saved ways of working. Reuse one as-is or customize a copy for a project." action={<button className="primary-cta" onClick={() => onNavigate('builder')}><Plus size={16} /> New workflow</button>} />
     <div className="filter-row"><label className="wide-search"><Search size={15} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search workflows" /></label><button className="filter-button" onClick={() => setQuery('')}>All projects <ChevronRight size={13} /></button></div>
     <div className="workflow-table surface">
-      {visibleWorkflows.map((workflow) => <button className="workflow-row" key={workflow.name} onClick={() => onNavigate('builder')}>
-        <span className="row-icon"><Workflow size={17} /></span><div className="row-main"><strong>{workflow.name}</strong><small>{workflow.summary}</small></div><span>{workflow.nodes} steps</span><span>{workflow.updated}</span><span className={`status-chip ${workflow.status.toLowerCase()}`}>{workflow.status}</span><ChevronRight size={15} />
-      </button>)}
+      <WorkflowRows workflows={visibleWorkflows} onOpen={() => onNavigate('builder')} />
     </div>
   </div>
 }
@@ -264,6 +244,7 @@ function ComponentsPage({ components, onCreate }: { components: ComponentTemplat
 
 function ProjectsPage({ project, onUpdate }: { project: ProjectContext; onUpdate: (project: ProjectContext) => void }) {
   const variables = Object.entries(project.variables)
+  const connected = Boolean(project.root)
   const updateVariable = (oldKey: string, key: string, value: string) => {
     const next = { ...project.variables }
     delete next[oldKey]
@@ -271,7 +252,7 @@ function ProjectsPage({ project, onUpdate }: { project: ProjectContext; onUpdate
     onUpdate({ ...project, variables: next })
   }
   return <div className="page-wrap"><PageHeading eyebrow="Context and permissions" title="Projects" description="Teach workflows about a repository once. Every component receives only the context and capabilities it needs." />
-    <div className="project-grid"><section className="surface project-card"><div className="surface-heading"><div><span className="eyebrow">Connected project</span><h2>{project.name}</h2></div><span className="status-chip ready"><CircleDot size={12} /> Connected</span></div><div className="editor-form"><label><span>Display name</span><input value={project.name} onChange={(event) => onUpdate({ ...project, name: event.target.value })} /></label><label><span>Repository root</span><input value={project.root} onChange={(event) => onUpdate({ ...project, root: event.target.value })} /></label><label><span>Working branch</span><input value={project.branch} onChange={(event) => onUpdate({ ...project, branch: event.target.value })} /></label></div></section>
+    <div className="project-grid"><section className="surface project-card"><div className="surface-heading"><div><span className="eyebrow">Local project</span><h2>{connected ? project.name : 'Connect a repository'}</h2></div><span className={`status-chip ${connected ? 'ready' : 'draft'}`}><CircleDot size={12} /> {connected ? 'Connected' : 'Not connected'}</span></div><div className="editor-form"><label><span>Display name</span><input value={project.name === 'No project selected' ? '' : project.name} onChange={(event) => onUpdate({ ...project, name: event.target.value || 'No project selected' })} placeholder="Remember" /></label><label><span>Repository root</span><input value={project.root} onChange={(event) => onUpdate({ ...project, root: event.target.value })} placeholder="/Users/you/Desktop/Repos/project" /></label><label><span>Working branch</span><input value={project.branch} onChange={(event) => onUpdate({ ...project, branch: event.target.value })} placeholder="main" /></label></div></section>
       <section className="surface policy-card"><div className="surface-heading"><div><span className="eyebrow">Driver policy</span><h2>Capabilities</h2></div><Settings2 size={17} /></div><PolicyRow label="Spawn configured agents" value="Allowed" /><PolicyRow label="Shell access" value="Project only" /><PolicyRow label="Network access" value="Ask first" /><PolicyRow label="Publish changes" value="Ask first" /></section>
     </div>
     <section className="surface variables-surface"><div className="surface-heading"><div><span className="eyebrow">Reusable values</span><h2>Project variables</h2></div><button className="secondary-cta" onClick={() => onUpdate({ ...project, variables: { ...project.variables, 'new.variable': '' } })}><Plus size={14} /> Add variable</button></div><p>These fill matching placeholders such as <code>{'{{preview.url}}'}</code> before an assignment is handed to the driver.</p>{variables.map(([key, value]) => <div className="variable-row" key={key}><input value={key} onChange={(event) => updateVariable(key, event.target.value, value)} /><input value={value} onChange={(event) => updateVariable(key, key, event.target.value)} /></div>)}</section>
@@ -280,46 +261,28 @@ function ProjectsPage({ project, onUpdate }: { project: ProjectContext; onUpdate
 
 function PolicyRow({ label, value }: { label: string; value: string }) { return <div className="policy-row"><span>{label}</span><strong>{value}</strong></div> }
 
-function TemplatesPage({ onNavigate }: { onNavigate: (page: AppPage) => void }) {
-  const templates = [
-    { name: 'UI quality loop', level: 'Guided', description: 'Build an interface, review code and visuals in parallel, then revise or ship.', steps: ['Implement', 'Code review', 'Visual judge', 'Quality gate', 'Handoff'] },
-    { name: 'Bug fix lane', level: 'Guided', description: 'Reproduce a defect, make a focused fix, run tests, and request review.', steps: ['Reproduce', 'Fix', 'Test', 'Review'] },
-    { name: 'Continuous issue triage', level: 'Advanced', description: 'Watch an inbox, classify new issues, route urgent work, and checkpoint until stopped.', steps: ['Watch', 'Classify', 'Route', 'Checkpoint'] },
-  ]
-  return <div className="page-wrap"><PageHeading eyebrow="Starting points" title="Templates" description="Understandable defaults for common jobs. Every template can be opened, inspected, and changed." />
-    <div className="template-grid">{templates.map((template, index) => <article className="surface template-card" key={template.name}><div className="template-visual"><Workflow size={24} /><span>{template.steps.length} steps</span></div><span className={`level-pill ${template.level.toLowerCase()}`}>{template.level}</span><h2>{template.name}</h2><p>{template.description}</p><div className="template-steps">{template.steps.map((step) => <span key={step}>{step}</span>)}</div><button className="secondary-cta" onClick={() => onNavigate('builder')}>{index === 0 ? 'Use template' : 'Open in builder'} <ArrowRight size={13} /></button></article>)}</div>
+function TemplatesPage({ onNavigate, templates, onCreate, onTogglePublished }: { onNavigate: (page: AppPage) => void; templates: WorkflowTemplate[]; onCreate: (template: WorkflowTemplate) => void; onTogglePublished: (id: string) => void }) {
+  const [creating, setCreating] = useState(false)
+  const [query, setQuery] = useState('')
+  const [draft, setDraft] = useState({ name: '', description: '', level: 'Guided' as WorkflowTemplate['level'], steps: '', published: false })
+  const visible = templates.filter((template) => `${template.name} ${template.description} ${template.steps.join(' ')}`.toLowerCase().includes(query.toLowerCase()))
+  const create = () => {
+    if (!draft.name.trim() || !draft.description.trim()) return
+    const id = draft.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
+    onCreate({ id, name: draft.name.trim(), description: draft.description.trim(), level: draft.level, steps: draft.steps.split(',').map((step) => step.trim()).filter(Boolean), componentIds: ['implement-ui', 'code-review', 'visual-judge', 'decision-gate', 'summarize'], source: 'user', published: draft.published, createdAt: new Date().toISOString() })
+    setCreating(false)
+    setDraft({ name: '', description: '', level: 'Guided', steps: '', published: false })
+  }
+  return <div className="page-wrap"><PageHeading eyebrow="Starting points" title="Templates" description="Reusable workflow structures from Relay, your workspace, and eventually the shared community registry." action={<button className="primary-cta" onClick={() => setCreating(true)}><Plus size={15} /> New template</button>} />
+    {creating && <section className="surface template-create"><div className="editor-title"><div><span className="eyebrow">Save reusable workflow</span><h2>Create template</h2></div><button className="icon-button" onClick={() => setCreating(false)}><X size={16} /></button></div><div className="editor-form two-column"><label><span>Name</span><input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="My release workflow" /></label><label><span>Complexity</span><select value={draft.level} onChange={(event) => setDraft({ ...draft, level: event.target.value as WorkflowTemplate['level'] })}><option>Guided</option><option>Advanced</option></select></label></div><div className="editor-form"><label><span>Description</span><input value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.target.value })} placeholder="Explain when another user should choose this template." /></label><label><span>Step labels, comma separated</span><input value={draft.steps} onChange={(event) => setDraft({ ...draft, steps: event.target.value })} placeholder="Plan, Implement, Review, Handoff" /></label><label className="publish-setting"><input type="checkbox" checked={draft.published} onChange={(event) => setDraft({ ...draft, published: event.target.checked })} /><span><strong>Publish to community</strong><small>Make this template discoverable after registry review. Keep off for workspace-only use.</small></span></label></div><div className="editor-actions"><button className="secondary-cta" onClick={() => setCreating(false)}>Cancel</button><button className="primary-cta" onClick={create}>Create template</button></div></section>}
+    <div className="template-toolbar"><label className="wide-search"><Search size={14} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search templates" /></label><span>{templates.filter((template) => template.source === 'user').length} created by you</span></div>
+    <div className="template-grid">{visible.map((template) => <article className="surface template-card" key={template.id}><div className="template-visual"><Workflow size={24} /><span>{template.steps.length} steps</span></div><div className="template-badges"><span className={`level-pill ${template.level.toLowerCase()}`}>{template.level}</span><span className={`visibility-pill ${template.published ? 'published' : 'private'}`}>{template.source === 'built-in' ? 'Relay' : template.published ? 'Published' : 'Private'}</span></div><h2>{template.name}</h2><p>{template.description}</p><div className="template-steps">{template.steps.map((step) => <span key={step}>{step}</span>)}</div><div className="template-actions"><button className="secondary-cta" onClick={() => onNavigate('builder')}>Use template <ArrowRight size={13} /></button>{template.source === 'user' && <button className={`publish-toggle ${template.published ? 'on' : ''}`} onClick={() => onTogglePublished(template.id)} aria-label={`${template.published ? 'Unpublish' : 'Publish'} ${template.name}`}><i /><span>{template.published ? 'Published' : 'Private'}</span></button>}</div></article>)}</div>
   </div>
 }
 
-function RunsPage({ onNavigate }: { onNavigate: (page: AppPage) => void }) {
-  return <div className="page-wrap"><PageHeading eyebrow="Execution history" title="Runs" description="Follow what happened, why the workflow chose each path, and what every agent produced." action={<button className="primary-cta" onClick={() => onNavigate('builder')}><Play size={14} /> New run</button>} />
-    <section className="surface control-room">
-      <div className="surface-heading"><div><span className="eyebrow">Live control room</span><h2>UI quality loop · run 185</h2></div><span className="live-pill"><i /> Live</span></div>
-      <div className="control-room-grid">
-        <div className="live-graph-panel">
-          <div className="live-graph">
-            <div className="live-node passed"><CheckCircle2 size={14} /><span><strong>Implement</strong><small>complete</small></span></div>
-            <div className="live-connector passed" />
-            <div className="live-fanout"><div className="live-node passed"><CheckCircle2 size={14} /><span><strong>Code review</strong><small>passed</small></span></div><div className="live-node running"><Activity size={14} /><span><strong>Visual judge</strong><small>running</small></span></div></div>
-            <div className="live-connector running" />
-            <div className="live-node waiting"><Clock3 size={14} /><span><strong>Quality gate</strong><small>waiting</small></span></div>
-          </div>
-          <div className="run-budget"><span>Iteration 1 of 3</span><span>7.8k / 40k tokens</span><span>00:12 / 60:00</span></div>
-        </div>
-        <div className="agent-lanes">
-          <AgentLane name="Driver" role="Orchestrator" status="Watching 2 agents" detail="Waiting for visual-judge verdict before evaluating the quality gate." tone="mint" icon={Workflow} />
-          <AgentLane name="Code review" role="Agent 01" status="Complete" detail="2 non-blocking findings · verdict: pass" tone="blue" icon={Code2} />
-          <AgentLane name="Visual judge" role="Agent 02" status="Inspecting mobile" detail="Browser: comparing 390 × 844 screenshot" tone="violet" icon={TerminalSquare} running />
-        </div>
-      </div>
-    </section>
-    <section className="surface run-hero"><div><span className="status-chip ready"><CheckCircle2 size={12} /> Completed</span><h2>UI quality loop</h2><p>Completed after one visual revision. All required checks passed.</p></div><div className="run-stats"><div><strong>18.2s</strong><span>Duration</span></div><div><strong>12.1k</strong><span>Tokens</span></div><div><strong>1</strong><span>Revision</span></div></div></section>
-    <section className="surface timeline-surface"><div className="surface-heading"><div><span className="eyebrow">Event trace</span><h2>What happened</h2></div><span className="event-log-label">events.jsonl</span></div><div className="timeline"><TimelineItem title="Implement UI completed" detail="8 files changed · patch artifact saved" time="0:05" /><TimelineItem title="Reviews ran in parallel" detail="Code passed · Visual requested changes" time="0:09" /><TimelineItem title="Quality gate chose revise" detail="Matched edge: route == revise" time="0:10" warning /><TimelineItem title="Visual feedback resolved" detail="2 corrections applied · recheck passed" time="0:16" /><TimelineItem title="Ship summary completed" detail="Pull request handoff saved" time="0:18" /></div></section>
+function RunsPage({ onNavigate, pendingRun }: { onNavigate: (page: AppPage) => void; pendingRun: PendingRun | null }) {
+  return <div className="page-wrap"><PageHeading eyebrow="Execution" title="Runs" description="Live driver and agent activity will appear here when a Relay CLI is connected." action={<button className="primary-cta" onClick={() => onNavigate('builder')}><Play size={14} /> Prepare run</button>} />
+    {pendingRun ? <section className="surface pending-run"><span className="pending-run-icon"><TerminalSquare size={22} /></span><div className="pending-run-copy"><span className="eyebrow">Waiting for local runner</span><h2>{pendingRun.workflowName}</h2><p>{pendingRun.configuration.task}</p><div className="pending-run-meta"><span>{pendingRun.configuration.autonomy}</span>{pendingRun.projectName && <span>{pendingRun.projectName}</span>}<span>{pendingRun.configuration.execution}</span></div></div><div className="connect-command"><span>Run from the project directory</span><code>relay connect</code><small>The website will attach this prepared run after the CLI is paired.</small></div></section> : <section className="surface runs-empty"><span><Activity size={23} /></span><h2>No runs yet</h2><p>Prepare a workflow run, then connect the Relay CLI from the target project. Real agent status, events, and artifacts will appear here.</p><button className="secondary-cta" onClick={() => onNavigate('builder')}>Open workflow builder <ArrowRight size={13} /></button></section>}
+    <section className="surface runner-explanation"><div><span className="eyebrow">Live tracking</span><h2>What appears after connection</h2></div><div className="runner-feature-grid"><span><Workflow size={16} /><strong>Graph state</strong><small>Ready, running, waiting, and completed nodes.</small></span><span><TerminalSquare size={16} /><strong>Agent lanes</strong><small>Current instruction, tool activity, and heartbeat.</small></span><span><FileCode2 size={16} /><strong>Artifacts</strong><small>Patches, reports, screenshots, and approvals.</small></span></div></section>
   </div>
 }
-
-function AgentLane({ name, role, status, detail, tone, icon: Icon, running }: { name: string; role: string; status: string; detail: string; tone: string; icon: React.ComponentType<{ size?: number }>; running?: boolean }) {
-  return <article className={`agent-lane ${running ? 'is-running' : ''}`}><span className={`agent-avatar tone-${tone}`}><Icon size={15} /></span><div className="agent-lane-main"><div><strong>{name}</strong><small>{role}</small></div><p>{detail}</p><span className="agent-status">{running && <i />} {status}</span></div><ChevronRight className="agent-lane-chevron" size={15} /></article>
-}
-
-function TimelineItem({ title, detail, time, warning }: { title: string; detail: string; time: string; warning?: boolean }) { return <div className={`timeline-item ${warning ? 'warning' : ''}`}><span><CheckCircle2 size={14} /></span><div><strong>{title}</strong><small>{detail}</small></div><time>{time}</time></div> }

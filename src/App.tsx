@@ -38,30 +38,40 @@ import { StartRunModal, type RunConfiguration } from './components/StartRunModal
 import { WorkflowEdge } from './components/WorkflowEdge'
 import { WorkflowNode } from './components/WorkflowNode'
 import { componentById, componentLibrary } from './data/library'
+import { builtInTemplates } from './data/templates'
 import type {
   ComponentTemplate,
-  NodeStatus,
   ProjectContext,
   RelayAssignmentBundle,
   WorkflowDocument,
   WorkflowEdge as WorkflowEdgeType,
   WorkflowNode as WorkflowNodeType,
 } from './types/workflow'
+import type { PendingRun, WorkflowRecord, WorkflowTemplate } from './types/catalog'
 
 const nodeTypes = { workflow: WorkflowNode }
 const edgeTypes = { workflow: WorkflowEdge }
 
 const projectSeed: ProjectContext = {
-  name: 'Acme storefront',
-  root: './',
-  branch: 'feature/product-grid',
+  name: 'No project selected',
+  root: '',
+  branch: '',
   variables: {
     'project.instructions': 'AGENTS.md',
-    'commands.check': 'pnpm typecheck && pnpm test',
-    'commands.test': 'pnpm test',
-    'preview.url': 'http://localhost:3000',
-    'visual.tolerance': '4px spacing · AA contrast',
+    'commands.check': '',
+    'commands.test': '',
+    'preview.url': '',
+    'visual.tolerance': '',
   },
+}
+
+const starterWorkflow: WorkflowRecord = {
+  id: 'implementation-quality-loop',
+  name: 'Implementation quality loop',
+  description: 'Implement, review in parallel, revise when required, and prepare a handoff.',
+  nodeCount: 5,
+  status: 'ready',
+  source: 'starter',
 }
 
 function nodeFromTemplate(
@@ -89,11 +99,11 @@ function nodeFromTemplate(
 }
 
 const initialNodes: WorkflowNodeType[] = [
-  nodeFromTemplate(componentById['implement-ui'], 'implement', { x: 40, y: 245 }, 'Build the new product grid from the approved brief.'),
-  nodeFromTemplate(componentById['code-review'], 'review', { x: 445, y: 72 }, 'Check correctness, maintainability, and project conventions.'),
-  nodeFromTemplate(componentById['visual-judge'], 'visual', { x: 445, y: 395 }, 'Compare desktop and mobile renders to the reference.'),
+  nodeFromTemplate(componentById['implement-ui'], 'implement', { x: 40, y: 245 }, 'Implement the run objective using the connected project instructions.'),
+  nodeFromTemplate(componentById['code-review'], 'review', { x: 445, y: 72 }, 'Review correctness, maintainability, and project conventions.'),
+  nodeFromTemplate(componentById['visual-judge'], 'visual', { x: 445, y: 395 }, 'Evaluate the rendered result against the supplied acceptance criteria.'),
   nodeFromTemplate(componentById['decision-gate'], 'gate', { x: 840, y: 235 }, 'Merge reviewer verdicts and choose the next route.'),
-  nodeFromTemplate(componentById.summarize, 'ship', { x: 1225, y: 235 }, 'Prepare a pull request-ready handoff.'),
+  nodeFromTemplate(componentById.summarize, 'ship', { x: 1225, y: 235 }, 'Prepare a concise, evidence-backed handoff.'),
 ]
 
 const edge = (
@@ -138,15 +148,16 @@ interface WorkspaceProps {
   onNavigate: (page: AppPage) => void
   theme: 'dark' | 'light'
   onToggleTheme: () => void
+  onWorkflowSaved: (workflow: WorkflowRecord) => void
+  onPrepareRun: (run: PendingRun) => void
 }
 
-function Workspace({ project, onUpdateProject, components, onImportComponents, onNavigate, theme, onToggleTheme }: WorkspaceProps) {
+function Workspace({ project, onUpdateProject, components, onImportComponents, onNavigate, theme, onToggleTheme, onWorkflowSaved, onPrepareRun }: WorkspaceProps) {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
-  const [workflowName, setWorkflowName] = useState('UI quality loop')
+  const [workflowName, setWorkflowName] = useState('Implementation quality loop')
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [libraryOpen, setLibraryOpen] = useState(true)
-  const [running, setRunning] = useState(false)
   const [startRunOpen, setStartRunOpen] = useState(false)
   const [kickoffTask, setKickoffTask] = useState('')
   const [saveState, setSaveState] = useState<'saved' | 'saving'>('saved')
@@ -169,23 +180,6 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
     setSaveState('saving')
     setNodes((current) => current.map((node) =>
       node.id === id ? { ...node, data: { ...node.data, ...patch } } : node,
-    ))
-  }, [setNodes])
-
-  const setNodeStatus = useCallback((id: string, status: NodeStatus, result?: string) => {
-    setNodes((current) => current.map((node) =>
-      node.id === id
-        ? {
-            ...node,
-            data: {
-              ...node.data,
-              status,
-              result,
-              runtime: status === 'passed' || status === 'failed' ? '2.9s' : undefined,
-              tokens: status === 'passed' || status === 'failed' ? '2.4k tok' : undefined,
-            },
-          }
-        : node,
     ))
   }, [setNodes])
 
@@ -218,9 +212,9 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
 
   const documentForExport = useCallback((): WorkflowDocument => ({
     schemaVersion: '1.0',
-    id: 'ui-quality-loop',
+    id: 'implementation-quality-loop',
     name: workflowName,
-    description: 'Implement, review in parallel, loop on quality failures, and prepare a handoff.',
+    description: 'Implement, review in parallel, revise when required, and prepare a handoff.',
     project,
     nodes,
     edges,
@@ -268,10 +262,20 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
   const saveWorkflow = useCallback(async () => {
     setSaveState('saving')
     localStorage.setItem('relay.workflow', JSON.stringify(documentForExport()))
+    onWorkflowSaved({
+      id: 'implementation-quality-loop',
+      name: workflowName,
+      description: 'Implement, review in parallel, revise when required, and prepare a handoff.',
+      nodeCount: nodes.length,
+      projectName: project.root ? project.name : undefined,
+      updatedAt: new Date().toISOString(),
+      status: 'ready',
+      source: 'local',
+    })
     await sleep(350)
     setSaveState('saved')
     showToast('Workflow saved locally')
-  }, [documentForExport, showToast])
+  }, [documentForExport, nodes.length, onWorkflowSaved, project.name, project.root, showToast, workflowName])
 
   const exportWorkflow = useCallback(() => {
     const blob = new Blob([JSON.stringify(assignmentForExport(), null, 2)], { type: 'application/json' })
@@ -308,38 +312,19 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
   }, [fitView, onImportComponents, onUpdateProject, setEdges, setNodes, showToast])
 
   const runWorkflow = useCallback(async (configuration: RunConfiguration) => {
-    if (running) return
     setKickoffTask(configuration.task)
-    setRunning(true)
-    setNodes((current) => current.map((node) => ({
-      ...node,
-      data: { ...node.data, status: 'idle', result: undefined, runtime: undefined, tokens: undefined },
-    })))
-
-    setNodeStatus('implement', 'running', 'Editing 8 files…')
-    await sleep(700)
-    setNodeStatus('implement', 'passed', 'diff +468 −0 · 8 files')
-    setNodeStatus('review', 'running', 'Reviewing patch…')
-    setNodeStatus('visual', 'running', 'Checking 2 viewports…')
-    await sleep(850)
-    setNodeStatus('review', 'passed', '2 nits · non-blocking')
-    setNodeStatus('visual', 'failed', 'H1 weight · padding mismatch')
-    setNodeStatus('gate', 'running', 'Resolving verdicts…')
-    await sleep(650)
-    setNodeStatus('gate', 'failed', 'Route: revise')
-    setNodeStatus('implement', 'running', 'Applying visual feedback…')
-    await sleep(700)
-    setNodeStatus('implement', 'passed', '2 visual fixes applied')
-    setNodeStatus('visual', 'running', 'Rechecking viewports…')
-    await sleep(650)
-    setNodeStatus('visual', 'passed', 'Matches reference · AA')
-    setNodeStatus('gate', 'passed', 'Route: ship')
-    setNodeStatus('ship', 'running', 'Preparing handoff…')
-    await sleep(650)
-    setNodeStatus('ship', 'passed', 'PR summary ready')
-    setRunning(false)
-    showToast(`${configuration.autonomy === 'autonomous' ? 'Autonomous run' : 'Run'} completed after 1 revision`)
-  }, [running, setNodeStatus, setNodes, showToast])
+    onPrepareRun({
+      id: `run-${Date.now()}`,
+      workflowName,
+      projectName: project.root ? project.name : undefined,
+      configuration,
+      createdAt: new Date().toISOString(),
+      state: 'waiting-for-runner',
+    })
+    showToast('Run prepared — connect the Relay CLI to execute')
+    await sleep(450)
+    onNavigate('runs')
+  }, [onNavigate, onPrepareRun, project.name, project.root, showToast, workflowName])
 
   return (
     <main className="app-shell">
@@ -404,8 +389,8 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
             <div className="toolbar-actions">
               <button className="subtle-button" onClick={() => onNavigate('templates')}><LayoutTemplate size={15} /> Templates</button>
               <button className="subtle-button" onClick={() => onNavigate('projects')}><Plus size={15} /> Variable</button>
-              <button className="run-button" disabled={running} onClick={() => setStartRunOpen(true)}>
-                <Play size={14} fill="currentColor" /> {running ? 'Running…' : 'Run workflow'}
+              <button className="run-button" onClick={() => setStartRunOpen(true)}>
+                <Play size={14} fill="currentColor" /> Run workflow
               </button>
             </div>
           </div>
@@ -472,11 +457,25 @@ export default function App() {
   const [theme, setTheme] = useState<'dark' | 'light'>(() => localStorage.getItem('relay.theme') === 'light' ? 'light' : 'dark')
   const [project, setProject] = useState<ProjectContext>(() => {
     const saved = localStorage.getItem('relay.project')
-    return saved ? JSON.parse(saved) as ProjectContext : projectSeed
+    if (!saved) return projectSeed
+    const parsed = JSON.parse(saved) as ProjectContext
+    return parsed.name === 'Acme storefront' && parsed.root === './' ? projectSeed : parsed
   })
   const [customComponents, setCustomComponents] = useState<ComponentTemplate[]>(() => {
     const saved = localStorage.getItem('relay.components')
     return saved ? JSON.parse(saved) as ComponentTemplate[] : []
+  })
+  const [workflows, setWorkflows] = useState<WorkflowRecord[]>(() => {
+    const saved = localStorage.getItem('relay.workflows')
+    return saved ? JSON.parse(saved) as WorkflowRecord[] : [starterWorkflow]
+  })
+  const [userTemplates, setUserTemplates] = useState<WorkflowTemplate[]>(() => {
+    const saved = localStorage.getItem('relay.userTemplates')
+    return saved ? JSON.parse(saved) as WorkflowTemplate[] : []
+  })
+  const [pendingRun, setPendingRun] = useState<PendingRun | null>(() => {
+    const saved = localStorage.getItem('relay.pendingRun')
+    return saved ? JSON.parse(saved) as PendingRun : null
   })
   const components = useMemo(() => {
     const customIds = new Set(customComponents.map((item) => item.id))
@@ -490,6 +489,12 @@ export default function App() {
   })
   useEffect(() => localStorage.setItem('relay.project', JSON.stringify(project)), [project])
   useEffect(() => localStorage.setItem('relay.components', JSON.stringify(customComponents)), [customComponents])
+  useEffect(() => localStorage.setItem('relay.workflows', JSON.stringify(workflows)), [workflows])
+  useEffect(() => localStorage.setItem('relay.userTemplates', JSON.stringify(userTemplates)), [userTemplates])
+  useEffect(() => {
+    if (pendingRun) localStorage.setItem('relay.pendingRun', JSON.stringify(pendingRun))
+    else localStorage.removeItem('relay.pendingRun')
+  }, [pendingRun])
   useEffect(() => {
     document.documentElement.dataset.theme = theme
     localStorage.setItem('relay.theme', theme)
@@ -519,6 +524,8 @@ export default function App() {
           onNavigate={navigate}
           theme={theme}
           onToggleTheme={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')}
+          onWorkflowSaved={(workflow) => setWorkflows((current) => [workflow, ...current.filter((item) => item.id !== workflow.id)])}
+          onPrepareRun={setPendingRun}
         />
       </ReactFlowProvider>
     )
@@ -534,6 +541,11 @@ export default function App() {
       onCreateComponent={(component) => setCustomComponents((current) => [...current.filter((item) => item.id !== component.id), component])}
       theme={theme}
       onToggleTheme={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')}
+      workflows={workflows}
+      templates={[...userTemplates, ...builtInTemplates]}
+      onCreateTemplate={(template) => setUserTemplates((current) => [template, ...current.filter((item) => item.id !== template.id)])}
+      onToggleTemplatePublished={(id) => setUserTemplates((current) => current.map((template) => template.id === id ? { ...template, published: !template.published } : template))}
+      pendingRun={pendingRun}
     />
   )
 }

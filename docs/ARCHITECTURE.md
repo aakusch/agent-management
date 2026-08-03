@@ -14,7 +14,7 @@ Markdown components + workflow JSON
         board / run inspector
 ```
 
-The repository currently implements the authoring and observation layers. The browser stores drafts locally, imports/exports a typed assignment bundle, and demonstrates a live control room. It does not execute arbitrary commands.
+The repository currently implements the authoring and observation surfaces. The browser stores drafts locally, imports/exports a typed assignment bundle, and exposes honest empty, waiting, and event-driven run states. It does not fabricate execution or execute arbitrary commands.
 
 ## Source formats
 

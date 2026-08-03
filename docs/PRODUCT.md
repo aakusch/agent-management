@@ -79,6 +79,8 @@ The live view splits into graph state and agent lanes. The graph answers where e
 
 Searchable components and blueprints from the repository, workspace, or an optional registry. Users can compare versions, inspect tests, and see where a component is used.
 
+User-created templates are private by default. Publishing creates a sanitized, versioned registry snapshot: repository paths, secrets, run history, and project-specific values are excluded. Published versions are immutable; edits produce a new version. Unpublishing removes future discovery without breaking workflows that already pin the published version. The current UI persists this visibility locally until the registry service exists.
+
 ### 4. Projects
 
 Bindings for repository root, branch/worktree strategy, instruction files, commands, secrets, tool permissions, preview environments, and model budgets.

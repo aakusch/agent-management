@@ -4,14 +4,12 @@
 
 The board is the editor. Markdown files are the source of truth. A workflow connects agents, judges, tools, decision gates, and human approvals; project bindings customize those components without forking their shared instructions.
 
-![Relay workflow board](docs/relay-board.png)
-
-![Relay live agent control room](docs/relay-live-runs.png)
+![Relay workspace dashboard](docs/relay-dashboard.png)
 
 ## What is working
 
 - Draggable, connectable workflow canvas with zoom, pan, minimap, and deletion
-- Seven Markdown-backed starter components in [`components/`](components)
+- Nineteen Markdown-backed components in [`components/`](components), including repository mapping, project checks, browser QA, migration review, dependency audit, documentation sync, integration review, and cross-repository impact
 - Parallel review branches, labeled decision routes, and a visible revision loop
 - Per-node instruction overrides plus project-level variables
 - Local save and portable JSON import/export
@@ -20,10 +18,11 @@ The board is the editor. Markdown files are the source of truth. A workflow conn
 - Split-view control room for graph state and parallel agent lanes
 - Task-first run setup with guided, adaptive, and full-autonomous execution modes
 - Persistent dark and light themes
+- Seven built-in workflow templates plus persisted user templates with private/published visibility
 - Simulated execution states that demonstrate a failed visual review and retry
 - A typed workflow document model ready for a real runner
 
-This version deliberately simulates execution. It proves the authoring, handoff, and live-observation model before coupling the product to a specific agent runtime.
+This version implements authoring, handoff, persisted workflow/template catalogs, and the live-observation contract. Until a Relay CLI is connected, the Runs page stays in an honest waiting or empty state rather than fabricating execution data.
 
 ## Run locally
 

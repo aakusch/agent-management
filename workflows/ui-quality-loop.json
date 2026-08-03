@@ -4,15 +4,15 @@
   "name": "UI quality loop",
   "description": "Implement, review in parallel, loop on quality failures, and prepare a handoff.",
   "project": {
-    "name": "Example storefront",
-    "root": "./",
-    "branch": "feature/product-grid",
+    "name": "No project selected",
+    "root": "",
+    "branch": "",
     "variables": {
       "project.instructions": "AGENTS.md",
-      "commands.check": "pnpm typecheck && pnpm test",
-      "commands.test": "pnpm test",
-      "preview.url": "http://localhost:3000",
-      "visual.tolerance": "4px spacing · AA contrast"
+      "commands.check": "",
+      "commands.test": "",
+      "preview.url": "",
+      "visual.tolerance": ""
     }
   },
   "nodes": [
