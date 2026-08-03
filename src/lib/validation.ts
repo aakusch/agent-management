@@ -1,7 +1,7 @@
 import type { ComponentTemplate, ProjectContext, RelayAssignmentBundle, WorkflowDocument } from '../types/workflow'
 import { isRecord, isStringArray } from './storage'
 
-const componentKinds = new Set(['agent', 'judge', 'router', 'human', 'tool', 'workflow'])
+const componentKinds = new Set(['agent', 'judge', 'router', 'human', 'tool', 'workflow', 'catalyst'])
 const nodeStatuses = new Set(['idle', 'queued', 'running', 'passed', 'failed'])
 const reasoningEfforts = new Set(['low', 'medium', 'high', 'xhigh'])
 const relayTools = new Set(['filesystem', 'terminal', 'git', 'browser', 'web'])
@@ -66,6 +66,10 @@ export function isWorkflowDocument(value: unknown): value is WorkflowDocument {
     || value.nodes.length > 500
     || value.edges.length > 2_000) return false
 
+  if (value.entry !== undefined && (!isRecord(value.entry)
+    || !['manual', 'catalyst'].includes(String(value.entry.mode))
+    || (value.entry.nodeId !== undefined && typeof value.entry.nodeId !== 'string'))) return false
+
   const nodeIds = new Set<string>()
   const projectTools: Set<string> | null = value.project.defaults ? new Set(value.project.defaults.tools) : null
   for (const node of value.nodes) {
@@ -109,6 +113,15 @@ export function isWorkflowDocument(value: unknown): value is WorkflowDocument {
       || (edge.data !== undefined && !isRecord(edge.data))) return false
     edgeIds.add(edge.id)
   }
+
+  const catalystNodes = value.nodes.filter((node) => node.data.kind === 'catalyst')
+  if (catalystNodes.length > 1) return false
+  if (catalystNodes.length === 1) {
+    const entryNode = catalystNodes[0]
+    if (value.entry?.mode !== 'catalyst'
+      || value.entry.nodeId !== entryNode.id
+      || value.edges.some((edge) => edge.target === entryNode.id)) return false
+  } else if (value.entry?.mode === 'catalyst') return false
 
   return true
 }

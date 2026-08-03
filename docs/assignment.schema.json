@@ -29,7 +29,7 @@
           "id": { "type": "string" },
           "name": { "type": "string" },
           "description": { "type": "string" },
-          "kind": { "enum": ["agent", "judge", "router", "human", "tool", "workflow"] },
+          "kind": { "enum": ["agent", "judge", "router", "human", "tool", "workflow", "catalyst"] },
           "icon": { "type": "string" },
           "color": { "type": "string" },
           "version": { "type": "string" },

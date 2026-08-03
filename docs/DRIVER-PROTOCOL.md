@@ -45,6 +45,8 @@ The driver is the only owner of graph state. Worker agents do not decide what ru
 
 A catalyst is an authenticated request to create a normal run; it is never a privileged execution shortcut. The website authors catalyst definitions, while a local daemon or hosted receiver owns the network boundary.
 
+The referenced workflow must declare `entry.mode: catalyst` and point `entry.nodeId` at its single Catalyst start component. The driver rejects incoming transitions to that node and begins downstream execution with the validated event envelope. If a workflow has no Catalyst component, a missing or `manual` entry mode is assumed and only an explicit run kickoff starts its root components.
+
 Supported entrypoints are signed webhooks, authorized connector events, runner-managed cron schedules, and schema-limited secure queries. Before creating `run.created`, the receiver must authenticate the caller, validate the payload schema, enforce rate limits, reject replayed delivery IDs, apply an idempotency key, resolve the pinned workflow, and record sanitized catalyst provenance. Secret values stay in the OS keychain, environment, or connector vault and never enter exported workflow or catalyst JSON.
 
 See [`catalyst.schema.json`](catalyst.schema.json).

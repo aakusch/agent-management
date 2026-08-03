@@ -12,6 +12,7 @@ The board is the editor. Markdown files are the source of truth. A workflow conn
 - Nineteen Markdown-backed components in [`components/`](components), including repository mapping, project checks, browser QA, migration review, dependency audit, documentation sync, integration review, and cross-repository impact
 - Parallel review branches, labeled decision routes, and a visible revision loop
 - Selectable transitions with independent triggers, payload routing, delay, blocked behavior, priority, and loop policy
+- Explicit Catalyst start components for hook-, connector-, schedule-, or query-initiated workflows; graphs without one remain manually started
 - Per-node instruction overrides plus project-level variables
 - Per-node model, reasoning-effort, and tool overrides with visible inherited values
 - A project configuration surface for directory, branch, runtime defaults, tool allowlists, permissions, and variables

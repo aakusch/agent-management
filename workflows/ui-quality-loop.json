@@ -27,6 +27,9 @@
       "publish": "ask"
     }
   },
+  "entry": {
+    "mode": "manual"
+  },
   "nodes": [
     {
       "id": "implement",

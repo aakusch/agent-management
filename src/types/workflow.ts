@@ -1,6 +1,6 @@
 import type { Edge, Node } from '@xyflow/react'
 
-export type ComponentKind = 'agent' | 'judge' | 'router' | 'human' | 'tool' | 'workflow'
+export type ComponentKind = 'agent' | 'judge' | 'router' | 'human' | 'tool' | 'workflow' | 'catalyst'
 export type NodeStatus = 'idle' | 'queued' | 'running' | 'passed' | 'failed'
 export type ReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh'
 export type RelayTool = 'filesystem' | 'terminal' | 'git' | 'browser' | 'web'
@@ -101,6 +101,10 @@ export interface WorkflowDocument {
   name: string
   description: string
   project: ProjectContext
+  entry?: {
+    mode: 'manual' | 'catalyst'
+    nodeId?: string
+  }
   nodes: WorkflowNode[]
   edges: WorkflowEdge[]
   updatedAt: string

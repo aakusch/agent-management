@@ -9,6 +9,7 @@ export interface WorkflowRecord {
   updatedAt?: string
   status: 'draft' | 'ready'
   source: 'starter' | 'local' | 'imported'
+  entryMode?: 'manual' | 'catalyst'
   steps?: string[]
 }
 

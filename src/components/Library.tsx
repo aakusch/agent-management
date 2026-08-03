@@ -14,6 +14,7 @@ import {
   Search,
   ShieldCheck,
   TerminalSquare,
+  Zap,
   WandSparkles,
   Workflow,
 } from 'lucide-react'
@@ -32,6 +33,7 @@ const icons = {
   'user-check': CircleUserRound,
   'file-check': FileCheck2,
   workflow: Workflow,
+  zap: Zap,
 } as const
 
 interface LibraryProps {
@@ -48,6 +50,7 @@ export function Library({ components, onAdd, onCollapse, onNewComponent }: Libra
     Agents: true,
     Logic: true,
     'Tools & people': true,
+    Entrypoints: true,
     Workflows: true,
   })
 
@@ -63,6 +66,7 @@ export function Library({ components, onAdd, onCollapse, onNewComponent }: Libra
     { label: 'Agents', items: filtered.filter((item) => ['agent', 'judge'].includes(item.kind)) },
     { label: 'Logic', items: filtered.filter((item) => item.kind === 'router') },
     { label: 'Tools & people', items: filtered.filter((item) => ['tool', 'human'].includes(item.kind)) },
+    { label: 'Entrypoints', items: filtered.filter((item) => item.kind === 'catalyst') },
     { label: 'Workflows', items: filtered.filter((item) => item.kind === 'workflow') },
   ]
 

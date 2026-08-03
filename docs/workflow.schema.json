@@ -43,6 +43,15 @@
       },
       "additionalProperties": false
     },
+    "entry": {
+      "type": "object",
+      "required": ["mode"],
+      "properties": {
+        "mode": { "enum": ["manual", "catalyst"] },
+        "nodeId": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
     "nodes": {
       "type": "array",
       "items": {
@@ -63,7 +72,7 @@
               "label": { "type": "string" },
               "description": { "type": "string" },
               "templateId": { "type": "string" },
-              "kind": { "enum": ["agent", "judge", "router", "human", "tool", "workflow"] },
+              "kind": { "enum": ["agent", "judge", "router", "human", "tool", "workflow", "catalyst"] },
               "instruction": { "type": "string" },
               "overrides": { "type": "object", "additionalProperties": { "type": "string" } },
               "execution": {

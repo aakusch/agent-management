@@ -14,6 +14,7 @@ import {
   TerminalSquare,
   WandSparkles,
   Workflow,
+  Zap,
   X,
 } from 'lucide-react'
 import type { WorkflowNode as WorkflowNodeType } from '../types/workflow'
@@ -31,6 +32,7 @@ const icons = {
   split: GitFork,
   'user-check': CircleUserRound,
   'file-check': FileCheck2,
+  zap: Zap,
 } as const
 
 export function WorkflowNode({ data, selected }: NodeProps<WorkflowNodeType>) {
@@ -48,8 +50,10 @@ export function WorkflowNode({ data, selected }: NodeProps<WorkflowNodeType>) {
       className={`workflow-node tone-${data.color} status-${data.status} ${selected ? 'is-selected' : ''}`}
       aria-label={`${data.label} workflow component`}
     >
-      <Handle id="target-left" type="target" position={Position.Left} className="node-handle" />
-      <Handle id="target-bottom" type="target" position={Position.Bottom} className="node-handle node-handle-bottom" />
+      {data.kind !== 'catalyst' && <>
+        <Handle id="target-left" type="target" position={Position.Left} className="node-handle" />
+        <Handle id="target-bottom" type="target" position={Position.Bottom} className="node-handle node-handle-bottom" />
+      </>}
       <div className="node-heading">
         <span className="node-icon"><Icon size={18} strokeWidth={1.8} /></span>
         <span className="node-title">{data.label}</span>

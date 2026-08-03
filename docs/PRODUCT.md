@@ -84,6 +84,8 @@ The multi-run view organizes those same real streams into named codebase section
 
 Catalysts describe authenticated ways to create runs: signed webhooks, connector events, runner-owned schedules, and schema-limited secure queries. The browser never becomes the public receiver. A local daemon or hosted Relay boundary authenticates, rate-limits, deduplicates, records provenance, and only then creates a normal run governed by the workflow's permissions and budgets.
 
+A user primes a workflow by placing one Catalyst component at the beginning of its graph and connecting it to the first executable step. That changes the workflow entry mode from manual to catalyst; it does not run anything. Workflows without that component continue to start from the task/objective form.
+
 ### 4. Library
 
 Searchable components and blueprints from the repository, workspace, or an optional registry. Users can compare versions, inspect tests, and see where a component is used.

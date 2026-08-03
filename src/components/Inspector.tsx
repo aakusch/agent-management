@@ -12,6 +12,7 @@ import {
   SlidersHorizontal,
   Wrench,
   X,
+  Zap,
 } from 'lucide-react'
 import type { ProjectContext, ReasoningEffort, RelayTool, WorkflowNode } from '../types/workflow'
 
@@ -51,6 +52,7 @@ export function Inspector({ node, project, sourceInstruction, onClose, onUpdateN
   const instructionChanged = node.data.instruction !== sourceInstruction
   const supportsAgentRuntime = node.data.kind === 'agent' || node.data.kind === 'judge'
   const supportsTools = supportsAgentRuntime || node.data.kind === 'tool'
+  const isCatalyst = node.data.kind === 'catalyst'
 
   const updateExecution = <Key extends keyof NonNullable<WorkflowNode['data']['execution']>>(
     key: Key,
@@ -76,7 +78,7 @@ export function Inspector({ node, project, sourceInstruction, onClose, onUpdateN
     <aside className="inspector-panel component-inspector">
       <div className="inspector-heading component-inspector-heading">
         <div className="inspector-component-title">
-          <span className={`inspector-kind tone-${node.data.color}`}><Bot size={15} /></span>
+          <span className={`inspector-kind tone-${node.data.color}`}>{isCatalyst ? <Zap size={15} /> : <Bot size={15} />}</span>
           <div><span className="eyebrow">{node.data.kind} component</span><h2>{node.data.label}</h2></div>
         </div>
         <button className="icon-button" onClick={onClose} aria-label="Close component inspector"><X size={17} /></button>
@@ -84,7 +86,7 @@ export function Inspector({ node, project, sourceInstruction, onClose, onUpdateN
 
       <div className="inspector-tabs" role="tablist" aria-label="Component editor">
         <button role="tab" aria-selected={tab === 'setup'} className={tab === 'setup' ? 'active' : ''} onClick={() => setTab('setup')}><Settings2 size={14} /> Setup</button>
-        <button role="tab" aria-selected={tab === 'prompt'} className={tab === 'prompt' ? 'active' : ''} onClick={() => setTab('prompt')}><FileText size={14} /> Prompt{instructionChanged && <i />}</button>
+        <button role="tab" aria-selected={tab === 'prompt'} className={tab === 'prompt' ? 'active' : ''} onClick={() => setTab('prompt')}><FileText size={14} /> {isCatalyst ? 'Contract' : 'Prompt'}{instructionChanged && <i />}</button>
         <button role="tab" aria-selected={tab === 'source'} className={tab === 'source' ? 'active' : ''} onClick={() => setTab('source')}><ExternalLink size={14} /> Source</button>
       </div>
 
@@ -95,6 +97,11 @@ export function Inspector({ node, project, sourceInstruction, onClose, onUpdateN
             <label><span>Name</span><input value={node.data.label} onChange={(event) => onUpdateNode(node.id, { label: event.target.value })} /></label>
             <label><span>Purpose in this workflow</span><textarea rows={3} value={node.data.description} onChange={(event) => onUpdateNode(node.id, { description: event.target.value })} /></label>
           </section>
+
+          {isCatalyst && <section className="catalyst-entry-note">
+            <Zap size={16} />
+            <div><strong>Catalyst entrypoint</strong><p>This node is the workflow’s start. A verified receiver event creates the run and supplies its payload; no agent executes this component.</p></div>
+          </section>}
 
           {(supportsAgentRuntime || supportsTools) && <section className="form-section inspector-section-card runtime-settings">
             <div className="inspector-section-heading"><span><BrainCircuit size={14} /></span><div><h3>Agent runtime</h3><p>Override project defaults only when this step needs it.</p></div></div>
@@ -137,10 +144,10 @@ export function Inspector({ node, project, sourceInstruction, onClose, onUpdateN
         </>}
 
         {tab === 'prompt' && <section className="form-section prompt-editor-section">
-          <div className="prompt-editor-heading"><div><span className="eyebrow">Effective instruction</span><h3>{instructionChanged ? 'Customized for this node' : 'Using reusable source'}</h3></div>{instructionChanged && <button className="inherit-reset" onClick={() => onUpdateNode(node.id, { instruction: sourceInstruction })}><RotateCcw size={12} /> Reset</button>}</div>
+          <div className="prompt-editor-heading"><div><span className="eyebrow">{isCatalyst ? 'Entry contract' : 'Effective instruction'}</span><h3>{instructionChanged ? 'Customized for this node' : 'Using reusable source'}</h3></div>{instructionChanged && <button className="inherit-reset" onClick={() => onUpdateNode(node.id, { instruction: sourceInstruction })}><RotateCcw size={12} /> Reset</button>}</div>
           <textarea className="instruction-editor" rows={24} value={node.data.instruction} onChange={(event) => onUpdateNode(node.id, { instruction: event.target.value })} aria-label="Component instruction override" />
           <div className="prompt-editor-footer"><span>{node.data.instruction.length.toLocaleString()} characters</span><span>{instructionChanged ? 'Node override' : sourcePath}</span></div>
-          <p className="form-hint">This prompt is sent with the run objective and resolved project context. Editing it does not change the reusable Markdown component.</p>
+          <p className="form-hint">{isCatalyst ? 'This contract governs how the verified event envelope becomes downstream workflow context.' : 'This prompt is sent with the run objective and resolved project context.'} Editing it does not change the reusable Markdown component.</p>
         </section>}
 
         {tab === 'source' && <section className="form-section source-panel">

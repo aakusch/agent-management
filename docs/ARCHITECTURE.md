@@ -62,7 +62,9 @@ The handoff artifact is a self-contained `*.relay.json` file with kind `relay.as
 
 ### Catalyst
 
-Catalysts are separately versioned entrypoint definitions, not embedded secrets. The authoring app persists their type, selector, target workflow, and required authentication mode. A receiver validates the definition in [`catalyst.schema.json`](catalyst.schema.json), resolves secret references outside the file, and emits a normal `run.created` event with catalyst provenance.
+Catalysts are separately versioned entrypoint definitions, not embedded secrets. A workflow is catalyst-primed only when its graph starts with one `kind: catalyst` component. That node has no incoming transition and passes the receiver's validated payload and sanitized provenance to the first executable component. Without a Catalyst node, `entry.mode` is `manual` and the driver starts from the graph's ordinary root components.
+
+The authoring app persists a catalyst's type, selector, target workflow, and required authentication mode. Only catalyst-primed workflows may be selected. A receiver validates the definition in [`catalyst.schema.json`](catalyst.schema.json), resolves secret references outside the file, and emits a normal `run.created` event with catalyst provenance.
 
 ### Workflow references
 

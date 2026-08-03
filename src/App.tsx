@@ -30,6 +30,7 @@ import {
   Settings2,
   Sparkles,
   Sun,
+  Zap,
 } from 'lucide-react'
 import { Inspector } from './components/Inspector'
 import { Library } from './components/Library'
@@ -70,6 +71,7 @@ const isWorkflowRecordList = (value: unknown): value is WorkflowRecord[] => Arra
   && typeof item.nodeCount === 'number'
   && ['draft', 'ready'].includes(String(item.status))
   && ['starter', 'local', 'imported'].includes(String(item.source))
+  && (item.entryMode === undefined || ['manual', 'catalyst'].includes(String(item.entryMode)))
   && (item.steps === undefined || (Array.isArray(item.steps) && item.steps.every((step) => typeof step === 'string'))),
 )
 
@@ -176,6 +178,7 @@ const starterWorkflow: WorkflowRecord = {
   nodeCount: 5,
   status: 'ready',
   source: 'starter',
+  entryMode: 'manual',
   steps: ['Implement UI', 'Code review', 'Visual judge', 'Quality gate', 'Ship summary'],
 }
 
@@ -357,6 +360,12 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
     })), [workflowId, workflows])
   const authoringComponents = useMemo(() => [...components, ...workflowComponents], [components, workflowComponents])
   const componentLookup = useMemo(() => Object.fromEntries(authoringComponents.map((item) => [item.id, item])), [authoringComponents])
+  const catalystNodes = useMemo(() => nodes.filter((node) => node.data.kind === 'catalyst'), [nodes])
+  const hasCatalyst = catalystNodes.length > 0
+  const isCatalystPrimed = catalystNodes.length === 1
+    && edges.some((edge) => edge.source === catalystNodes[0].id)
+    && !edges.some((edge) => edge.target === catalystNodes[0].id)
+    && nodes.every((node) => node.id === catalystNodes[0].id || edges.some((edge) => edge.target === node.id))
 
   const selectedNode = useMemo(
     () => nodes.find((node) => node.id === selectedNodeId) ?? null,
@@ -425,6 +434,10 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
   }, [setNodes])
 
   const onConnect = useCallback((connection: Connection) => {
+    if (nodes.some((node) => node.id === connection.target && node.data.kind === 'catalyst')) {
+      showToast('A Catalyst is a starting point and cannot receive a transition.', 'error')
+      return
+    }
     setEdges((current) => addEdge({
       ...connection,
       id: `edge-${Date.now()}`,
@@ -433,7 +446,7 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
       data: { tone: 'default', trigger: 'always', payload: { mode: 'all' }, onBlocked: 'wait' },
     }, current))
     setSaveState('saving')
-  }, [setEdges])
+  }, [nodes, setEdges, showToast])
 
   const onDrop = useCallback((event: React.DragEvent) => {
     event.preventDefault()
@@ -449,10 +462,11 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
     name: workflowName,
     description: 'Implement, review in parallel, revise when required, and prepare a handoff.',
     project,
+    entry: hasCatalyst ? { mode: 'catalyst', nodeId: catalystNodes[0].id } : { mode: 'manual' },
     nodes,
     edges,
     updatedAt: new Date().toISOString(),
-  }), [edges, nodes, project, workflowId, workflowName])
+  }), [catalystNodes, edges, hasCatalyst, nodes, project, workflowId, workflowName])
 
   const assignmentForExport = useCallback((): RelayAssignmentBundle => {
     const usedTemplateIds = new Set(nodes.map((node) => node.data.templateId))
@@ -516,13 +530,14 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
       updatedAt: new Date().toISOString(),
       status: 'ready',
       source: 'local',
+      entryMode: isCatalystPrimed ? 'catalyst' : 'manual',
       steps: nodes.map((node) => node.data.label),
     })
     await sleep(350)
     setSaveState('saved')
     showToast('Workflow saved locally')
     return true
-  }, [documentForExport, nodes, onWorkflowSaved, project.name, project.root, showToast, workflowId, workflowName])
+  }, [documentForExport, isCatalystPrimed, nodes, onWorkflowSaved, project.name, project.root, showToast, workflowId, workflowName])
 
   const exportWorkflow = useCallback(() => {
     const blob = new Blob([JSON.stringify(assignmentForExport(), null, 2)], { type: 'application/json' })
@@ -543,16 +558,45 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
   const validateWorkflow = useCallback(() => {
     if (!nodes.length) {
       showToast('Add at least one component before validating.', 'error')
-      return
+      return false
     }
     const nodeIds = new Set(nodes.map((node) => node.id))
     const brokenEdge = edges.find((item) => !nodeIds.has(item.source) || !nodeIds.has(item.target))
     if (brokenEdge) {
       showToast(`Transition ${brokenEdge.id} references a missing component.`, 'error')
-      return
+      return false
     }
-    showToast(`Workflow valid · ${nodes.length} components · ${edges.length} transitions`)
-  }, [edges, nodes, showToast])
+    if (catalystNodes.length > 1) {
+      showToast('Use one Catalyst start component per workflow.', 'error')
+      return false
+    }
+    const catalyst = catalystNodes[0]
+    if (catalyst && edges.some((edge) => edge.target === catalyst.id)) {
+      showToast('The Catalyst must be the starting point and cannot have incoming transitions.', 'error')
+      return false
+    }
+    if (catalyst && !edges.some((edge) => edge.source === catalyst.id)) {
+      showToast('Connect the Catalyst to the first executable component.', 'error')
+      return false
+    }
+    const roots = nodes.filter((node) => !edges.some((edge) => edge.target === node.id))
+    if (catalyst && roots.some((node) => node.id !== catalyst.id)) {
+      showToast('A catalyst workflow must route every executable component from its Catalyst start.', 'error')
+      return false
+    }
+    if (!roots.length) {
+      showToast('The workflow needs a starting component.', 'error')
+      return false
+    }
+    showToast(`Workflow valid · ${hasCatalyst ? 'catalyst entry' : 'manual entry'} · ${nodes.length} components · ${edges.length} transitions`)
+    return true
+  }, [catalystNodes, edges, hasCatalyst, nodes, showToast])
+
+  const primeCatalyst = useCallback(async () => {
+    if (!validateWorkflow()) return
+    const saved = await saveWorkflow()
+    if (saved) onNavigate('catalysts')
+  }, [onNavigate, saveWorkflow, validateWorkflow])
 
   const importWorkflow = useCallback(async (file: File) => {
     try {
@@ -612,7 +656,9 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
         <div className="topbar-actions">
           <button className="subtle-button header-action" onClick={() => onNavigate('templates')}><LayoutTemplate size={15} /> Templates</button>
           <button className="subtle-button header-action" onClick={() => void openProjectConfig()}><Settings2 size={15} /> Configure</button>
-          <button className="run-button" onClick={() => setStartRunOpen(true)}><Play size={14} fill="currentColor" /> Run workflow</button>
+          {hasCatalyst
+            ? <button className="run-button catalyst-prime-button" onClick={() => void primeCatalyst()}><Zap size={14} fill="currentColor" /> Prime catalyst</button>
+            : <button className="run-button" onClick={() => setStartRunOpen(true)}><Play size={14} fill="currentColor" /> Run workflow</button>}
           <input
             ref={importInput}
             type="file"
