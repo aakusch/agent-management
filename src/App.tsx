@@ -22,7 +22,6 @@ import {
   FolderGit2,
   Import,
   LayoutTemplate,
-  LayoutDashboard,
   Menu,
   Moon,
   MoreHorizontal,
@@ -154,12 +153,58 @@ interface WorkspaceProps {
   onToggleTheme: () => void
   onWorkflowSaved: (workflow: WorkflowRecord) => void
   onPrepareRun: (run: PendingRun) => void
+  startingTemplate?: WorkflowTemplate
 }
 
-function Workspace({ project, onUpdateProject, components, onImportComponents, onNavigate, theme, onToggleTheme, onWorkflowSaved, onPrepareRun }: WorkspaceProps) {
-  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
-  const [workflowName, setWorkflowName] = useState('Implementation quality loop')
+function graphFromTemplate(template: WorkflowTemplate | undefined, components: ComponentTemplate[]) {
+  if (!template) return { nodes: initialNodes, edges: initialEdges }
+  const lookup = Object.fromEntries(components.map((component) => [component.id, component]))
+  const selected = template.componentIds.map((id) => lookup[id]).filter(Boolean)
+  if (!selected.length) return { nodes: initialNodes, edges: initialEdges }
+
+  if (template.id === 'ui-quality-loop' && selected.length >= 5) {
+    const [implement, review, visual, gate, ship] = selected
+    const nodes = [
+      nodeFromTemplate(implement, 'implement', { x: 40, y: 245 }),
+      nodeFromTemplate(review, 'review', { x: 445, y: 72 }),
+      nodeFromTemplate(visual, 'visual', { x: 445, y: 395 }),
+      nodeFromTemplate(gate, 'gate', { x: 840, y: 235 }),
+      nodeFromTemplate(ship, 'ship', { x: 1225, y: 235 }),
+    ]
+    const edges = [
+      edge('implement-review', 'implement', 'review', { data: { tone: 'success', trigger: 'always', payload: { mode: 'all' }, onBlocked: 'wait' } }),
+      edge('implement-visual', 'implement', 'visual', { data: { tone: 'default', trigger: 'always', payload: { mode: 'all' }, onBlocked: 'wait' } }),
+      edge('review-gate', 'review', 'gate', { data: { tone: 'success', trigger: 'always', payload: { mode: 'all' }, onBlocked: 'wait' } }),
+      edge('visual-gate', 'visual', 'gate', { data: { tone: 'default', trigger: 'always', payload: { mode: 'all' }, onBlocked: 'wait' } }),
+      edge('gate-ship', 'gate', 'ship', { data: { label: 'pass', tone: 'success', trigger: 'condition', condition: 'route == ship', payload: { mode: 'summary' }, onBlocked: 'wait' } }),
+      edge('gate-loop', 'gate', 'implement', { sourceHandle: 'source-bottom', targetHandle: 'target-bottom', data: { label: 'revise', tone: 'danger', trigger: 'condition', condition: 'route == revise', payload: { mode: 'all' }, onBlocked: 'wait', loop: { mode: 'bounded', maxIterations: 3, maxDurationMinutes: 30, stopOnNoProgress: 2, onExhausted: 'human' } } }),
+    ]
+    return { nodes, edges }
+  }
+
+  const nodes = selected.map((component, index) => nodeFromTemplate(
+    component,
+    `${component.id}-${index + 1}`,
+    { x: 40 + (index % 3) * 390, y: 115 + Math.floor(index / 3) * 330 },
+  ))
+  const edges = nodes.slice(0, -1).map((node, index) => edge(
+    `${node.id}-${nodes[index + 1].id}`,
+    node.id,
+    nodes[index + 1].id,
+    {
+      sourceHandle: index === 2 ? 'source-bottom' : undefined,
+      targetHandle: index === 2 ? 'target-bottom' : undefined,
+      data: { tone: 'default', trigger: 'always', payload: { mode: 'all' }, onBlocked: 'wait' },
+    },
+  ))
+  return { nodes, edges }
+}
+
+function Workspace({ project, onUpdateProject, components, onImportComponents, onNavigate, theme, onToggleTheme, onWorkflowSaved, onPrepareRun, startingTemplate }: WorkspaceProps) {
+  const startingGraph = graphFromTemplate(startingTemplate, components)
+  const [nodes, setNodes, onNodesChange] = useNodesState(startingGraph.nodes)
+  const [edges, setEdges, onEdgesChange] = useEdgesState(startingGraph.edges)
+  const [workflowName, setWorkflowName] = useState(startingTemplate?.name ?? 'Implementation quality loop')
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
   const [libraryOpen, setLibraryOpen] = useState(true)
@@ -167,6 +212,7 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
   const [kickoffTask, setKickoffTask] = useState('')
   const [saveState, setSaveState] = useState<'saved' | 'saving'>('saved')
   const [toast, setToast] = useState<string | null>(null)
+  const [overflowOpen, setOverflowOpen] = useState(false)
   const importInput = useRef<HTMLInputElement>(null)
   const { screenToFlowPosition, fitView } = useReactFlow()
   const componentLookup = useMemo(() => Object.fromEntries(components.map((item) => [item.id, item])), [components])
@@ -329,6 +375,7 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
       if (bundle) onImportComponents(bundle.components)
       setWorkflowName(imported.name)
       setSelectedNodeId(null)
+      setSelectedEdgeId(null)
       window.setTimeout(() => fitView({ padding: 0.16, duration: 500 }), 50)
       showToast('Workflow imported')
     } catch {
@@ -365,11 +412,18 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
           {project.name}
           <ChevronDown size={14} />
         </button>
-        <button className="topbar-dashboard-link" onClick={() => onNavigate('dashboard')}><LayoutDashboard size={14} /> Dashboard</button>
+        <div className="topbar-divider" />
+        <div className="topbar-workflow-name">
+          <span className="workflow-glyph"><GitFlowIcon /></span>
+          <div>
+            <span className="eyebrow">Workflow</span>
+            <input value={workflowName} onChange={(event) => { setWorkflowName(event.target.value); setSaveState('saving') }} aria-label="Workflow name" />
+          </div>
+        </div>
         <div className="topbar-actions">
-          <button className="subtle-button" onClick={() => importInput.current?.click()}>
-            <Import size={15} /> Import
-          </button>
+          <button className="subtle-button header-action" onClick={() => onNavigate('templates')}><LayoutTemplate size={15} /> Templates</button>
+          <button className="subtle-button header-action" onClick={() => onNavigate('projects')}><Plus size={15} /> Variable</button>
+          <button className="run-button" onClick={() => setStartRunOpen(true)}><Play size={14} fill="currentColor" /> Run workflow</button>
           <input
             ref={importInput}
             type="file"
@@ -381,7 +435,6 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
               event.target.value = ''
             }}
           />
-          <button className="subtle-button" onClick={exportWorkflow}><Download size={15} /> Export</button>
           <button className="save-button" onClick={() => void saveWorkflow()}>
             {saveState === 'saved' ? <Check size={15} /> : <Cloud className="pulse" size={15} />}
             {saveState === 'saved' ? 'Saved' : 'Save'}
@@ -389,7 +442,14 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
           <button className="icon-button theme-toggle" onClick={onToggleTheme} aria-label={`Use ${theme === 'dark' ? 'light' : 'dark'} theme`}>
             {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
           </button>
-          <button className="icon-button" onClick={() => onNavigate('runs')} aria-label="View runs"><MoreHorizontal size={18} /></button>
+          <div className="overflow-wrap">
+            <button className="icon-button" onClick={() => setOverflowOpen((open) => !open)} aria-label="More workflow actions" aria-expanded={overflowOpen}><MoreHorizontal size={18} /></button>
+            {overflowOpen && <div className="overflow-menu">
+              <button onClick={() => { importInput.current?.click(); setOverflowOpen(false) }}><Import size={15} /><span><strong>Import workflow</strong><small>Open a JSON or Relay assignment</small></span></button>
+              <button onClick={() => { exportWorkflow(); setOverflowOpen(false) }}><Download size={15} /><span><strong>Export assignment</strong><small>Download the driver-ready bundle</small></span></button>
+              <button onClick={() => { onNavigate('runs'); setOverflowOpen(false) }}><Cloud size={15} /><span><strong>View runs</strong><small>Open live and prepared runs</small></span></button>
+            </div>}
+          </div>
         </div>
       </header>
 
@@ -403,23 +463,6 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
         )}
 
         <section className="canvas-shell">
-          <div className="canvas-toolbar">
-            <div className="workflow-name">
-              <span className="workflow-glyph"><GitFlowIcon /></span>
-              <div>
-                <span className="eyebrow">Workflow</span>
-                <input value={workflowName} onChange={(event) => { setWorkflowName(event.target.value); setSaveState('saving') }} />
-              </div>
-            </div>
-            <div className="toolbar-actions">
-              <button className="subtle-button" onClick={() => onNavigate('templates')}><LayoutTemplate size={15} /> Templates</button>
-              <button className="subtle-button" onClick={() => onNavigate('projects')}><Plus size={15} /> Variable</button>
-              <button className="run-button" onClick={() => setStartRunOpen(true)}>
-                <Play size={14} fill="currentColor" /> Run workflow
-              </button>
-            </div>
-          </div>
-
           <ReactFlow
             nodes={nodes}
             edges={edges}
@@ -428,9 +471,9 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
             onNodesChange={(changes) => { onNodesChange(changes); setSaveState('saving') }}
             onEdgesChange={(changes) => { onEdgesChange(changes); setSaveState('saving') }}
             onConnect={onConnect}
-            onNodeClick={(_, node) => { setSelectedNodeId(node.id); setSelectedEdgeId(null) }}
-            onEdgeClick={(_, selected) => { setSelectedEdgeId(selected.id); setSelectedNodeId(null) }}
-            onPaneClick={() => { setSelectedNodeId(null); setSelectedEdgeId(null) }}
+            onNodeClick={(_, node) => { setSelectedNodeId(node.id); setSelectedEdgeId(null); setOverflowOpen(false) }}
+            onEdgeClick={(_, selected) => { setSelectedEdgeId(selected.id); setSelectedNodeId(null); setOverflowOpen(false) }}
+            onPaneClick={() => { setSelectedNodeId(null); setSelectedEdgeId(null); setOverflowOpen(false) }}
             onDrop={onDrop}
             onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'copy' }}
             fitView
@@ -441,14 +484,14 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
             proOptions={{ hideAttribution: true }}
             deleteKeyCode={['Backspace', 'Delete']}
           >
-            <Background variant={BackgroundVariant.Dots} gap={24} size={1.2} color="#252a31" />
+            <Background variant={BackgroundVariant.Dots} gap={24} size={1.2} color={theme === 'light' ? '#cbd3d8' : '#252a31'} />
             <Controls position="bottom-left" showInteractive={false} />
             <MiniMap
               position="bottom-right"
               pannable
               zoomable
               nodeColor={(node) => `var(--${String(node.data?.color ?? 'mint')})`}
-              maskColor="rgba(7, 9, 12, .76)"
+              maskColor={theme === 'light' ? 'rgba(236, 240, 242, .78)' : 'rgba(7, 9, 12, .76)'}
             />
           </ReactFlow>
 
@@ -507,6 +550,7 @@ export default function App() {
     const saved = localStorage.getItem('relay.userTemplates')
     return saved ? JSON.parse(saved) as WorkflowTemplate[] : []
   })
+  const [builderTemplate, setBuilderTemplate] = useState<WorkflowTemplate | undefined>(undefined)
   const [pendingRun, setPendingRun] = useState<PendingRun | null>(() => {
     const saved = localStorage.getItem('relay.pendingRun')
     return saved ? JSON.parse(saved) as PendingRun : null
@@ -551,6 +595,7 @@ export default function App() {
     return (
       <ReactFlowProvider>
         <Workspace
+          key={builderTemplate?.id ?? 'default-workflow'}
           project={project}
           onUpdateProject={setProject}
           components={components}
@@ -560,6 +605,7 @@ export default function App() {
           onToggleTheme={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')}
           onWorkflowSaved={(workflow) => setWorkflows((current) => [workflow, ...current.filter((item) => item.id !== workflow.id)])}
           onPrepareRun={setPendingRun}
+          startingTemplate={builderTemplate}
         />
       </ReactFlowProvider>
     )
@@ -579,6 +625,7 @@ export default function App() {
       templates={[...userTemplates, ...builtInTemplates]}
       onCreateTemplate={(template) => setUserTemplates((current) => [template, ...current.filter((item) => item.id !== template.id)])}
       onToggleTemplatePublished={(id) => setUserTemplates((current) => current.map((template) => template.id === id ? { ...template, published: !template.published } : template))}
+      onUseTemplate={(template) => { setBuilderTemplate(template); navigate('builder') }}
       pendingRun={pendingRun}
     />
   )

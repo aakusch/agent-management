@@ -1,25 +1,32 @@
 import { useState } from 'react'
 import {
+  Accessibility,
   Activity,
   ArrowRight,
   Blocks,
   Bot,
+  Bug,
   CheckCircle2,
   ChevronRight,
   CircleDot,
+  CircleUserRound,
   FileCode2,
+  FileCheck2,
   FolderGit2,
-  Home,
+  GitFork,
+  Eye,
   Layers3,
   Moon,
   Play,
   Plus,
   Search,
+  ScanSearch,
   Settings2,
   ShieldCheck,
   Sparkles,
   Sun,
   TerminalSquare,
+  WandSparkles,
   Workflow,
   X,
 } from 'lucide-react'
@@ -41,6 +48,7 @@ interface ManagementProps {
   templates: WorkflowTemplate[]
   onCreateTemplate: (template: WorkflowTemplate) => void
   onToggleTemplatePublished: (id: string) => void
+  onUseTemplate: (template: WorkflowTemplate) => void
   pendingRun: PendingRun | null
 }
 
@@ -54,13 +62,33 @@ const pageLabels: Record<Exclude<AppPage, 'builder'>, string> = {
 }
 
 const navItems = [
-  { id: 'dashboard', label: 'Dashboard', icon: Home },
   { id: 'workflows', label: 'Workflows', icon: Workflow },
   { id: 'components', label: 'Components', icon: Blocks },
   { id: 'projects', label: 'Projects', icon: FolderGit2 },
   { id: 'templates', label: 'Templates', icon: Layers3 },
   { id: 'runs', label: 'Runs', icon: Activity },
 ] as const
+
+const componentIconOptions = [
+  { id: 'wand', label: 'Builder', Icon: WandSparkles },
+  { id: 'bot', label: 'Agent', Icon: Bot },
+  { id: 'scan', label: 'Review', Icon: ScanSearch },
+  { id: 'eye', label: 'Visual', Icon: Eye },
+  { id: 'terminal', label: 'Terminal', Icon: TerminalSquare },
+  { id: 'split', label: 'Router', Icon: GitFork },
+  { id: 'shield', label: 'Safety', Icon: ShieldCheck },
+  { id: 'user-check', label: 'Human', Icon: CircleUserRound },
+  { id: 'accessibility', label: 'Access', Icon: Accessibility },
+  { id: 'bug', label: 'Debug', Icon: Bug },
+  { id: 'file-check', label: 'Handoff', Icon: FileCheck2 },
+] as const
+
+const componentColors = ['mint', 'blue', 'violet', 'amber', 'coral', 'rose', 'cyan'] as const
+
+function ComponentIcon({ icon, size = 14 }: { icon: string; size?: number }) {
+  const Icon = componentIconOptions.find((item) => item.id === icon)?.Icon ?? Bot
+  return <Icon size={size} strokeWidth={1.8} />
+}
 
 export function Management({
   page,
@@ -75,6 +103,7 @@ export function Management({
   templates,
   onCreateTemplate,
   onToggleTemplatePublished,
+  onUseTemplate,
   pendingRun,
 }: ManagementProps) {
   return (
@@ -118,7 +147,7 @@ export function Management({
           {page === 'workflows' && <WorkflowsPage onNavigate={onNavigate} workflows={workflows} />}
           {page === 'components' && <ComponentsPage components={components} onCreate={onCreateComponent} />}
           {page === 'projects' && <ProjectsPage project={project} onUpdate={onUpdateProject} />}
-          {page === 'templates' && <TemplatesPage onNavigate={onNavigate} templates={templates} onCreate={onCreateTemplate} onTogglePublished={onToggleTemplatePublished} />}
+          {page === 'templates' && <TemplatesPage templates={templates} onCreate={onCreateTemplate} onTogglePublished={onToggleTemplatePublished} onUseTemplate={onUseTemplate} />}
           {page === 'runs' && <RunsPage onNavigate={onNavigate} pendingRun={pendingRun} />}
         </section>
       </div>
@@ -205,27 +234,52 @@ function ComponentsPage({ components, onCreate }: { components: ComponentTemplat
   const [query, setQuery] = useState('')
   const selected = components.find((item) => item.id === selectedId) ?? components[0]
   const visibleComponents = components.filter((component) => `${component.name} ${component.description} ${component.kind}`.toLowerCase().includes(query.toLowerCase()))
-  const [draft, setDraft] = useState({ name: '', description: '', kind: 'agent' as ComponentKind, instruction: '', inputs: '', outputs: '' })
+  const [draft, setDraft] = useState({ name: '', description: '', kind: 'agent' as ComponentKind, icon: 'wand', color: 'mint', instruction: '', inputs: '', outputs: '' })
 
   const create = () => {
     if (!draft.name.trim() || !draft.instruction.trim()) return
     const id = draft.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
-    onCreate({ id, name: draft.name, description: draft.description || 'Custom workspace component.', kind: draft.kind, icon: 'wand', color: 'mint', version: '0.1.0', tags: ['custom'], inputs: draft.inputs.split(',').map((value) => value.trim()).filter(Boolean), outputs: draft.outputs.split(',').map((value) => value.trim()).filter(Boolean), instruction: draft.instruction })
+    onCreate({ id, name: draft.name, description: draft.description || 'Custom workspace component.', kind: draft.kind, icon: draft.icon, color: draft.color, version: '0.1.0', tags: ['custom'], inputs: draft.inputs.split(',').map((value) => value.trim()).filter(Boolean), outputs: draft.outputs.split(',').map((value) => value.trim()).filter(Boolean), instruction: draft.instruction })
     setSelectedId(id)
     setCreating(false)
-    setDraft({ name: '', description: '', kind: 'agent', instruction: '', inputs: '', outputs: '' })
+    setDraft({ name: '', description: '', kind: 'agent', icon: 'wand', color: 'mint', instruction: '', inputs: '', outputs: '' })
   }
 
   return <div className="page-wrap"><PageHeading eyebrow="Instruction library" title="Components" description="Configure reusable agent roles in plain language. Advanced contracts stay available when you need them." action={<button className="primary-cta" onClick={() => setCreating(true)}><Plus size={16} /> New component</button>} />
     <div className="component-manager surface">
-      <div className="component-list-pane"><label className="wide-search"><Search size={14} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search components" /></label>{visibleComponents.map((component) => <button key={component.id} className={selected?.id === component.id ? 'active' : ''} onClick={() => { setSelectedId(component.id); setCreating(false) }}><span className={`component-kind-dot tone-${component.color}`}><Bot size={14} /></span><div><strong>{component.name}</strong><small>{component.kind} · v{component.version}</small></div><ChevronRight size={14} /></button>)}</div>
+      <div className="component-list-pane"><label className="wide-search"><Search size={14} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search components" /></label>{visibleComponents.map((component) => <button key={component.id} className={selected?.id === component.id ? 'active' : ''} onClick={() => { setSelectedId(component.id); setCreating(false) }}><span className={`component-kind-dot tone-${component.color}`}><ComponentIcon icon={component.icon} /></span><div><strong>{component.name}</strong><small>{component.kind} · v{component.version}</small></div><ChevronRight size={14} /></button>)}</div>
       <div className="component-editor-pane">
         {creating ? <>
-          <div className="editor-title"><div><span className="eyebrow">New reusable instruction</span><h2>Create component</h2></div><button className="icon-button" onClick={() => setCreating(false)}><X size={17} /></button></div>
-          <div className="friendly-note"><Sparkles size={16} /><div><strong>Start with the job, not the settings.</strong><span>Describe what this agent should do and what a good result looks like. The technical contract can evolve later.</span></div></div>
-          <div className="editor-form two-column"><label><span>Name</span><input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="Accessibility reviewer" /></label><label><span>Role</span><select value={draft.kind} onChange={(event) => setDraft({ ...draft, kind: event.target.value as ComponentKind })}><option value="agent">Agent</option><option value="judge">Judge</option><option value="router">Decision</option><option value="tool">Tool</option><option value="human">Human</option></select></label></div>
-          <div className="editor-form"><label><span>What does it do?</span><input value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.target.value })} placeholder="Checks the interface for accessibility issues." /></label><label><span>Instructions</span><textarea rows={10} value={draft.instruction} onChange={(event) => setDraft({ ...draft, instruction: event.target.value })} placeholder="Review the rendered interface. Focus on keyboard navigation…" /></label><details><summary>Advanced input and output contract</summary><div className="two-column"><label><span>Inputs, comma separated</span><input value={draft.inputs} onChange={(event) => setDraft({ ...draft, inputs: event.target.value })} placeholder="preview_url, brief" /></label><label><span>Outputs</span><input value={draft.outputs} onChange={(event) => setDraft({ ...draft, outputs: event.target.value })} placeholder="verdict, findings" /></label></div></details></div>
-          <div className="editor-actions"><button className="secondary-cta" onClick={() => setCreating(false)}>Cancel</button><button className="primary-cta" onClick={create}>Create component</button></div>
+          <div className="component-create-heading"><div><span className="eyebrow">New reusable instruction</span><h2>Create a component</h2><p>Give the agent one clear job. You can specialize it per workflow later.</p></div><button className="icon-button" onClick={() => setCreating(false)} aria-label="Close component creator"><X size={17} /></button></div>
+          <div className="component-create-layout">
+            <div className="component-create-form">
+              <section className="create-section">
+                <div className="create-section-heading"><span>1</span><div><strong>Identity</strong><small>How users recognize this component on the board.</small></div></div>
+                <div className="editor-form"><label><span>Name</span><input autoFocus value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="Accessibility reviewer" /></label><label><span>What does it do?</span><input value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.target.value })} placeholder="Checks an interface for accessibility issues." /></label></div>
+                <div className="icon-picker-label">Icon</div>
+                <div className="icon-picker">{componentIconOptions.map(({ id, label, Icon }) => <button key={id} className={draft.icon === id ? 'selected' : ''} onClick={() => setDraft({ ...draft, icon: id })} title={label} aria-label={`${label} icon`}><Icon size={17} /></button>)}</div>
+                <div className="color-picker-label">Accent</div>
+                <div className="color-picker">{componentColors.map((color) => <button key={color} className={`tone-${color} ${draft.color === color ? 'selected' : ''}`} onClick={() => setDraft({ ...draft, color })} aria-label={`${color} accent`}><i /></button>)}</div>
+              </section>
+
+              <section className="create-section">
+                <div className="create-section-heading"><span>2</span><div><strong>Behavior</strong><small>Choose its role, then write the instruction the runner receives.</small></div></div>
+                <div className="role-picker">{(['agent', 'judge', 'router', 'tool', 'human'] as ComponentKind[]).map((kind) => <button key={kind} className={draft.kind === kind ? 'selected' : ''} onClick={() => setDraft({ ...draft, kind })}><ComponentIcon icon={kind === 'router' ? 'split' : kind === 'tool' ? 'terminal' : kind === 'human' ? 'user-check' : kind === 'judge' ? 'scan' : 'bot'} /><span>{kind === 'router' ? 'Decision' : kind}</span></button>)}</div>
+                <div className="editor-form"><label><span>Instructions</span><textarea rows={11} value={draft.instruction} onChange={(event) => setDraft({ ...draft, instruction: event.target.value })} placeholder="Review the rendered interface. Focus on keyboard navigation, semantic structure, labels, focus order, and contrast. Return a verdict and prioritized findings…" /></label><details><summary>Input and output contract · optional</summary><div className="two-column"><label><span>Inputs, comma separated</span><input value={draft.inputs} onChange={(event) => setDraft({ ...draft, inputs: event.target.value })} placeholder="preview_url, brief" /></label><label><span>Outputs</span><input value={draft.outputs} onChange={(event) => setDraft({ ...draft, outputs: event.target.value })} placeholder="verdict, findings" /></label></div></details></div>
+              </section>
+            </div>
+
+            <aside className="component-create-preview">
+              <span className="eyebrow">Board preview</span>
+              <div className={`component-preview-node tone-${draft.color}`}>
+                <div><span className="component-kind-dot"><ComponentIcon icon={draft.icon} size={16} /></span><strong>{draft.name || 'Untitled component'}</strong></div>
+                <p>{draft.description || 'A short purpose statement will appear here.'}</p>
+                <small>{draft.kind}</small>
+              </div>
+              <div className="create-guidance"><Sparkles size={15} /><p><strong>Keep it reusable.</strong> Put project paths, branch names, and temporary objectives in project or run configuration—not this source instruction.</p></div>
+            </aside>
+          </div>
+          <div className="editor-actions component-create-actions"><span>{!draft.name.trim() || !draft.instruction.trim() ? 'Name and instructions are required' : `Will create components/${draft.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.md`}</span><button className="secondary-cta" onClick={() => setCreating(false)}>Cancel</button><button className="primary-cta" onClick={create} disabled={!draft.name.trim() || !draft.instruction.trim()}>Create component</button></div>
         </> : selected ? <>
           <div className="editor-title"><div><span className="eyebrow">Reusable component</span><h2>{selected.name}</h2></div><span className="status-chip ready">v{selected.version}</span></div>
           <p className="editor-description">{selected.description}</p>
@@ -261,7 +315,7 @@ function ProjectsPage({ project, onUpdate }: { project: ProjectContext; onUpdate
 
 function PolicyRow({ label, value }: { label: string; value: string }) { return <div className="policy-row"><span>{label}</span><strong>{value}</strong></div> }
 
-function TemplatesPage({ onNavigate, templates, onCreate, onTogglePublished }: { onNavigate: (page: AppPage) => void; templates: WorkflowTemplate[]; onCreate: (template: WorkflowTemplate) => void; onTogglePublished: (id: string) => void }) {
+function TemplatesPage({ templates, onCreate, onTogglePublished, onUseTemplate }: { templates: WorkflowTemplate[]; onCreate: (template: WorkflowTemplate) => void; onTogglePublished: (id: string) => void; onUseTemplate: (template: WorkflowTemplate) => void }) {
   const [creating, setCreating] = useState(false)
   const [query, setQuery] = useState('')
   const [draft, setDraft] = useState({ name: '', description: '', level: 'Guided' as WorkflowTemplate['level'], steps: '', published: false })
@@ -276,7 +330,7 @@ function TemplatesPage({ onNavigate, templates, onCreate, onTogglePublished }: {
   return <div className="page-wrap"><PageHeading eyebrow="Starting points" title="Templates" description="Reusable workflow structures from Relay, your workspace, and eventually the shared community registry." action={<button className="primary-cta" onClick={() => setCreating(true)}><Plus size={15} /> New template</button>} />
     {creating && <section className="surface template-create"><div className="editor-title"><div><span className="eyebrow">Save reusable workflow</span><h2>Create template</h2></div><button className="icon-button" onClick={() => setCreating(false)}><X size={16} /></button></div><div className="editor-form two-column"><label><span>Name</span><input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="My release workflow" /></label><label><span>Complexity</span><select value={draft.level} onChange={(event) => setDraft({ ...draft, level: event.target.value as WorkflowTemplate['level'] })}><option>Guided</option><option>Advanced</option></select></label></div><div className="editor-form"><label><span>Description</span><input value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.target.value })} placeholder="Explain when another user should choose this template." /></label><label><span>Step labels, comma separated</span><input value={draft.steps} onChange={(event) => setDraft({ ...draft, steps: event.target.value })} placeholder="Plan, Implement, Review, Handoff" /></label><label className="publish-setting"><input type="checkbox" checked={draft.published} onChange={(event) => setDraft({ ...draft, published: event.target.checked })} /><span><strong>Publish to community</strong><small>Make this template discoverable after registry review. Keep off for workspace-only use.</small></span></label></div><div className="editor-actions"><button className="secondary-cta" onClick={() => setCreating(false)}>Cancel</button><button className="primary-cta" onClick={create}>Create template</button></div></section>}
     <div className="template-toolbar"><label className="wide-search"><Search size={14} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search templates" /></label><span>{templates.filter((template) => template.source === 'user').length} created by you</span></div>
-    <div className="template-grid">{visible.map((template) => <article className="surface template-card" key={template.id}><div className="template-visual"><Workflow size={24} /><span>{template.steps.length} steps</span></div><div className="template-badges"><span className={`level-pill ${template.level.toLowerCase()}`}>{template.level}</span><span className={`visibility-pill ${template.published ? 'published' : 'private'}`}>{template.source === 'built-in' ? 'Relay' : template.published ? 'Published' : 'Private'}</span></div><h2>{template.name}</h2><p>{template.description}</p><div className="template-steps">{template.steps.map((step) => <span key={step}>{step}</span>)}</div><div className="template-actions"><button className="secondary-cta" onClick={() => onNavigate('builder')}>Use template <ArrowRight size={13} /></button>{template.source === 'user' && <button className={`publish-toggle ${template.published ? 'on' : ''}`} onClick={() => onTogglePublished(template.id)} aria-label={`${template.published ? 'Unpublish' : 'Publish'} ${template.name}`}><i /><span>{template.published ? 'Published' : 'Private'}</span></button>}</div></article>)}</div>
+    <div className="template-grid">{visible.map((template) => <article className="surface template-card" key={template.id}><div className="template-visual"><Workflow size={24} /><span>{template.steps.length} steps</span></div><div className="template-badges"><span className={`level-pill ${template.level.toLowerCase()}`}>{template.level}</span><span className={`visibility-pill ${template.published ? 'published' : 'private'}`}>{template.source === 'built-in' ? 'Relay' : template.published ? 'Published' : 'Private'}</span></div><h2>{template.name}</h2><p>{template.description}</p><div className="template-steps">{template.steps.map((step) => <span key={step}>{step}</span>)}</div><div className="template-actions"><button className="secondary-cta" onClick={() => onUseTemplate(template)}>Use template <ArrowRight size={13} /></button>{template.source === 'user' && <button className={`publish-toggle ${template.published ? 'on' : ''}`} onClick={() => onTogglePublished(template.id)} aria-label={`${template.published ? 'Unpublish' : 'Publish'} ${template.name}`}><i /><span>{template.published ? 'Published' : 'Private'}</span></button>}</div></article>)}</div>
   </div>
 }
 

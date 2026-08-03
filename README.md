@@ -20,6 +20,8 @@ The board is the editor. Markdown files are the source of truth. A workflow conn
 - Task-first run setup with guided, adaptive, and full-autonomous execution modes
 - Persistent dark and light themes
 - Seven built-in workflow templates plus persisted user templates with private/published visibility
+- Template-to-builder handoff that instantiates the selected components and transitions on the canvas
+- Guided component creation with role, icon, accent, live board preview, and optional contracts
 - Simulated execution states that demonstrate a failed visual review and retry
 - A typed workflow document model ready for a real runner
 

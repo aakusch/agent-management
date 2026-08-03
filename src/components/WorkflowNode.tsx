@@ -1,6 +1,8 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react'
 import {
+  Accessibility,
   Bot,
+  Bug,
   Check,
   CircleUserRound,
   Eye,
@@ -8,6 +10,7 @@ import {
   GitFork,
   LoaderCircle,
   ScanSearch,
+  ShieldCheck,
   TerminalSquare,
   WandSparkles,
   X,
@@ -16,6 +19,10 @@ import type { WorkflowNode as WorkflowNodeType } from '../types/workflow'
 
 const icons = {
   wand: WandSparkles,
+  bot: Bot,
+  shield: ShieldCheck,
+  accessibility: Accessibility,
+  bug: Bug,
   scan: ScanSearch,
   eye: Eye,
   terminal: TerminalSquare,
