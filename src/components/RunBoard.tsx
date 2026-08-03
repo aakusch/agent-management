@@ -20,6 +20,7 @@ import {
   Search,
   Server,
   ShieldCheck,
+  Sparkles,
   TerminalSquare,
   Trash2,
   WifiOff,
@@ -54,6 +55,7 @@ const eventTypes = [
   'agent.spawned', 'agent.heartbeat', 'agent.tool.started', 'agent.tool.completed', 'agent.stopped',
   'route.selected', 'loop.iterated', 'loop.exhausted', 'artifact.created', 'approval.requested',
   'approval.resolved', 'budget.warning', 'policy.denied',
+  'specification.started', 'specification.completed', 'specification.failed',
 ]
 
 function slug(value: string) {
@@ -289,6 +291,8 @@ function ExpandedRun({ tile, onBack, onPatch }: { tile: RunMonitorTile; onBack: 
         <div className="run-detail-meta"><span><FolderGit2 size={13} /> {tile.projectName || 'No project'}</span><span><Radio size={13} /> {connection === 'live' ? 'Runner connected' : connection === 'connecting' ? 'Connecting…' : connection === 'error' ? 'Runner unavailable' : 'Runner disconnected'}</span></div>
       </header>
 
+      <section className="run-spec-phase"><span><Sparkles size={15} /></span><div><strong>Phase 0 · Specification preflight</strong><p>The driver first verifies project facts and writes the immutable <code>run-spec.json</code> accompaniment. The reusable graph begins only after that artifact is accepted.</p></div><em>{events.some((event) => event.type === 'specification.completed') ? 'Complete' : events.some((event) => event.type === 'specification.started') ? 'Running' : 'Pending'}</em></section>
+
       <div className={`runner-connect state-${connection}`}>
         <div className="runner-connect-status">
           <span className="runner-status-icon">{connection === 'connecting' ? <LoaderCircle className="spin" size={16} /> : connection === 'error' ? <WifiOff size={16} /> : <Server size={16} />}</span>
@@ -371,7 +375,7 @@ export function RunBoard({ board, workflows, stagedRuns, catalysts, onUpdateStag
       objective: run.configuration.task,
       projectName: run.projectName,
       status: 'waiting-runner',
-      steps: workflow?.steps ?? ['Prepare', 'Implement', 'Review', 'Verify', 'Handoff'],
+      steps: ['Specification preflight', ...(workflow?.steps ?? ['Prepare', 'Implement', 'Review', 'Verify', 'Handoff'])],
       createdAt: run.createdAt,
       updatedAt: new Date().toISOString(),
       graph: run.graph,
@@ -417,7 +421,7 @@ export function RunBoard({ board, workflows, stagedRuns, catalysts, onUpdateStag
             return <article className={`staged-run-row ${run.preparedBy === 'catalyst' ? 'catalyst-staged' : ''}`} key={run.id}>
             <div className="staged-run-name"><span>{run.preparedBy === 'catalyst' ? <Zap size={15} /> : <Workflow size={15} />}</span><div><strong>{run.workflowName}</strong><p>{run.configuration.task}</p></div></div>
             <span>{run.projectName || 'No project'}</span>
-            <div className="run-policy">{run.preparedBy === 'catalyst' ? <><span>Catalyst event</span><span>{catalyst ? catalyst.status === 'paused' ? 'paused' : 'configured' : 'setup required'}</span></> : <><span>{run.configuration.autonomy}</span><span>{run.configuration.execution === 'dry-run' ? 'dry run' : 'execute'}</span></>}</div>
+            <div className="run-policy">{run.preparedBy === 'catalyst' ? <><span>Catalyst event</span><span>{catalyst ? catalyst.status === 'paused' ? 'paused' : 'configured' : 'setup required'}</span></> : <><span>{run.configuration.autonomy}</span><span>{run.configuration.execution === 'dry-run' ? 'dry run' : 'execute'}</span></>}<span className="run-spec-policy"><Sparkles size={10} /> {run.configuration.specificationMode ?? 'adaptive'} spec</span></div>
             <time>{new Date(run.createdAt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</time>
             <div className="staged-actions"><button onClick={onOpenBuilder}>Edit</button>{run.preparedBy === 'catalyst' ? catalyst && catalyst.status !== 'paused' ? <span className="catalyst-waiting"><Radio size={12} /> Waiting for event</span> : <button className="start-staged" onClick={onOpenCatalysts}><Zap size={12} /> {catalyst ? 'Enable catalyst' : 'Configure catalyst'}</button> : <button className="start-staged" onClick={() => startStaged(run)}><Play size={12} /> Run workflow</button>}<button className="remove-staged" onClick={() => onUpdateStagedRuns(stagedRuns.filter((item) => item.id !== run.id))} aria-label={`Delete ${run.workflowName} staged run`}><Trash2 size={13} /></button></div>
           </article>})}

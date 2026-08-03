@@ -8,6 +8,7 @@ import {
   Eye,
   FileCheck2,
   GitFork,
+  Layers3,
   PanelLeftClose,
   Plus,
   ScanSearch,
@@ -33,6 +34,7 @@ const icons = {
   'user-check': CircleUserRound,
   'file-check': FileCheck2,
   workflow: Workflow,
+  module: Layers3,
   zap: Zap,
 } as const
 
@@ -47,6 +49,7 @@ export function Library({ components, onAdd, onCollapse, onNewComponent }: Libra
   const [query, setQuery] = useState('')
   const searchRef = useRef<HTMLInputElement>(null)
   const [open, setOpen] = useState<Record<string, boolean>>({
+    Modules: true,
     Agents: true,
     Logic: true,
     'Tools & people': true,
@@ -63,6 +66,7 @@ export function Library({ components, onAdd, onCollapse, onNewComponent }: Libra
   }, [components, query])
 
   const sections = [
+    { label: 'Modules', items: filtered.filter((item) => item.kind === 'module') },
     { label: 'Agents', items: filtered.filter((item) => ['agent', 'judge'].includes(item.kind)) },
     { label: 'Logic', items: filtered.filter((item) => item.kind === 'router') },
     { label: 'Tools & people', items: filtered.filter((item) => ['tool', 'human'].includes(item.kind)) },

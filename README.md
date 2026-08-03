@@ -9,9 +9,11 @@ The board is the editor. Markdown files are the source of truth for executable c
 ## What is working
 
 - Draggable, connectable workflow canvas with zoom, pan, minimap, and deletion
-- Nineteen Markdown-backed components in [`components/`](components), including repository mapping, project checks, browser QA, migration review, dependency audit, documentation sync, integration review, and cross-repository impact
+- Markdown-backed atomic components in [`components/`](components), including scoped implementation, diagnosis, targeted verification, deterministic logic gates, browser QA, migration safety, and final diff auditing
+- JSON-backed reusable Modules in [`modules/`](modules) that preserve component graphs, routes, loops, and handoffs behind a public input/output contract
 - Parallel review branches, labeled decision routes, and a visible revision loop
 - Selectable transitions with independent triggers, payload routing, delay, blocked behavior, priority, and loop policy
+- Optional agent-authored transition handoffs with structured fields and missing-handoff policy
 - Platform-managed Catalyst start nodes for hook-, connector-, schedule-, or query-initiated workflows; graphs without one remain manually started
 - Per-node instruction overrides plus project-level variables
 - Per-node model, reasoning-effort, and tool overrides with visible inherited values
@@ -28,8 +30,9 @@ The board is the editor. Markdown files are the source of truth for executable c
 - Task-first run preparation with guided, adaptive, and full-autonomous modes, optional budgets, and explicit CLI handoff
 - Keyboard-safe dialogs, component search, monitor reordering, and recoverable tile removal
 - Persistent dark and light themes
-- Seven built-in workflow templates plus persisted user templates with private/published visibility
+- JSON-backed workflow templates in [`templates/`](templates) plus persisted user templates with private/published visibility
 - Template-to-builder handoff that instantiates the selected components and transitions on the canvas
+- Automatic Specification preflight that writes `run-spec.json` from the objective, project evidence, and template adaptation rules before graph execution
 - Guided component creation with role, icon, accent, live board preview, and optional contracts
 - Simulated execution states that demonstrate a failed visual review and retry
 - A typed workflow document model ready for a real runner
@@ -82,6 +85,8 @@ That makes reuse practical: improving `visual-judge.md` improves every workflow 
 
 ```text
 components/             Reusable Markdown component definitions
+modules/                Reusable JSON component graphs with public contracts
+templates/              JSON workflow template assets and adaptation rules
 workflows/              Portable saved workflow documents
 src/components/         Canvas, node, edge, library, and inspector UI
 src/data/library.ts     Markdown discovery and frontmatter parsing

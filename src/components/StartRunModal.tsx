@@ -16,6 +16,7 @@ import {
 export interface RunConfiguration {
   task: string
   context?: string
+  specificationMode: 'adaptive' | 'exact'
   autonomy: 'guided' | 'adaptive' | 'autonomous'
   allowAdjacentFixes: boolean
   retryFailures: boolean
@@ -56,6 +57,7 @@ export function StartRunModal({ workflowName, projectName, onClose, onStart }: S
   const dialogRef = useRef<HTMLFormElement>(null)
   const [task, setTask] = useState('')
   const [context, setContext] = useState('')
+  const [specificationMode, setSpecificationMode] = useState<RunConfiguration['specificationMode']>('adaptive')
   const [autonomy, setAutonomy] = useState<RunConfiguration['autonomy']>('adaptive')
   const [allowAdjacentFixes, setAllowAdjacentFixes] = useState(true)
   const [retryFailures, setRetryFailures] = useState(true)
@@ -115,6 +117,7 @@ export function StartRunModal({ workflowName, projectName, onClose, onStart }: S
     onStart({
       task: normalizedTask,
       context: context.trim() || undefined,
+      specificationMode,
       autonomy,
       allowAdjacentFixes,
       retryFailures,
@@ -152,6 +155,18 @@ export function StartRunModal({ workflowName, projectName, onClose, onStart }: S
           </label>
 
           {projectName === 'No project selected' && <div className="project-warning"><AlertTriangle size={15} /><p><strong>No project is connected.</strong> The CLI runner will need a project directory before it can execute this run.</p></div>}
+
+          <section className="run-specification-card">
+            <span><Sparkles size={16} /></span>
+            <div>
+              <strong>Specification preflight</strong>
+              <p>Before the first workflow component, the runner inspects this objective and project, then writes a run-specific execution spec without changing the reusable workflow.</p>
+              <div className="specification-choice" role="group" aria-label="Workflow specification mode">
+                <button type="button" className={specificationMode === 'adaptive' ? 'active' : ''} aria-pressed={specificationMode === 'adaptive'} onClick={() => setSpecificationMode('adaptive')}><Sparkles size={12} /> Adapt to scope</button>
+                <button type="button" className={specificationMode === 'exact' ? 'active' : ''} aria-pressed={specificationMode === 'exact'} onClick={() => setSpecificationMode('exact')}><ShieldCheck size={12} /> Keep exact graph</button>
+              </div>
+            </div>
+          </section>
 
           <div className="run-section-heading">
             <div><h3>How independently should it work?</h3><p>Choose how often Relay should stop and ask you.</p></div>

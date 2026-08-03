@@ -5,6 +5,8 @@ Relay workflows are ordinary, versionable files. An agent can create and change 
 ```text
 .relay/
   components/*.md
+  modules/*.json
+  templates/*.json
   workflows/<name>/workflow.json
   runs/staged/<run-id>.json
 ```
@@ -19,13 +21,15 @@ From this repository, use `npm run relay -- <command>`:
 npm run relay -- create .relay/workflows/review/workflow.json --name "Review loop" --project-root /absolute/repo
 npm run relay -- add-node .relay/workflows/review/workflow.json --id implement --name "Implement" --component implement-ui
 npm run relay -- add-node .relay/workflows/review/workflow.json --id review --name "Review" --component code-review --kind judge
-npm run relay -- connect .relay/workflows/review/workflow.json --from implement --to review
+npm run relay -- connect .relay/workflows/review/workflow.json --from implement --to review --handoff structured
 npm run relay -- connect .relay/workflows/review/workflow.json --from review --to implement --label revise --condition "route == revise" --loop 3
 npm run relay -- validate .relay/workflows/review/workflow.json
 npm run relay -- stage .relay/workflows/review/workflow.json --objective "Fix the failing checkout flow"
 ```
 
 The supported commands are `create`, `inspect`, `add-node`, `connect`, `validate`, and `stage`. They fail on missing nodes, duplicate identifiers, invalid catalyst entrypoints, or invalid graphs. This makes them suitable as structured terminal tools for an agent while leaving the JSON open for direct editing when necessary.
+
+Built-in components, Modules, and templates are ordinary assets in the repository rather than TypeScript constants. An agent can author a module JSON with internal nodes, transitions, entry/exit nodes, and a public contract, then reference it with `add-node --kind module --module <module-id>`. Staging always creates a pending Phase 0 specification artifact so project- and objective-specific choices accompany the reusable workflow instead of mutating it.
 
 ## Run monitoring
 

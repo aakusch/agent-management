@@ -22,12 +22,14 @@ import {
   Download,
   FolderGit2,
   Import,
+  Layers3,
   Menu,
   Moon,
   MoreHorizontal,
   Play,
   Sparkles,
   Sun,
+  X,
   Zap,
 } from 'lucide-react'
 import { Inspector } from './components/Inspector'
@@ -39,9 +41,10 @@ import { WorkflowEdge } from './components/WorkflowEdge'
 import { WorkflowNode } from './components/WorkflowNode'
 import { WorkflowToolbar } from './components/WorkflowToolbar'
 import { componentById, componentLibrary, platformComponents } from './data/library'
+import { builtInModules, moduleComponentTemplates } from './data/modules'
 import { builtInTemplates } from './data/templates'
 import { isRecord, readStored, removeStored, writeStored } from './lib/storage'
-import { isComponentTemplate, isProjectContext, isWorkflowDocument, parseWorkflowImport } from './lib/validation'
+import { isComponentTemplate, isProjectContext, isWorkflowDocument, isWorkflowModuleDefinition, parseWorkflowImport } from './lib/validation'
 import type {
   ComponentTemplate,
   ProjectContext,
@@ -49,8 +52,9 @@ import type {
   WorkflowDocument,
   WorkflowEdge as WorkflowEdgeType,
   WorkflowNode as WorkflowNodeType,
+  WorkflowModuleDefinition,
 } from './types/workflow'
-import type { CatalystDefinition, PendingRun, RunMonitorBoard, WorkflowRecord, WorkflowTemplate } from './types/catalog'
+import type { CatalystDefinition, PendingRun, RunGraphSnapshot, RunMonitorBoard, WorkflowRecord, WorkflowTemplate } from './types/catalog'
 
 const nodeTypes = { workflow: WorkflowNode }
 const edgeTypes = { workflow: WorkflowEdge }
@@ -82,6 +86,8 @@ const isWorkflowTemplateList = (value: unknown): value is WorkflowTemplate[] => 
   && item.steps.every((step) => typeof step === 'string')
   && Array.isArray(item.componentIds)
   && item.componentIds.every((id) => typeof id === 'string')
+  && (item.moduleIds === undefined || (Array.isArray(item.moduleIds) && item.moduleIds.every((id) => typeof id === 'string')))
+  && (item.adaptationRules === undefined || Array.isArray(item.adaptationRules))
   && typeof item.published === 'boolean',
 )
 
@@ -92,6 +98,7 @@ const isPendingRun = (value: unknown): value is PendingRun => isRecord(value)
   && ['staged', 'waiting-for-runner'].includes(String(value.state))
   && isRecord(value.configuration)
   && typeof value.configuration.task === 'string'
+  && (value.configuration.specificationMode === undefined || ['adaptive', 'exact'].includes(String(value.configuration.specificationMode)))
   && ['guided', 'adaptive', 'autonomous'].includes(String(value.configuration.autonomy))
   && ['execute', 'dry-run'].includes(String(value.configuration.execution))
 
@@ -160,6 +167,14 @@ const projectSeed: ProjectContext = {
     network: 'ask',
     publish: 'ask',
   },
+  profile: {
+    status: 'not-scanned',
+    structure: 'unknown',
+    packageManager: 'auto',
+    capabilities: [],
+    instructions: ['AGENTS.md', 'CLAUDE.md'],
+    commands: {},
+  },
 }
 
 const normalizeProject = (project: ProjectContext): ProjectContext => ({
@@ -170,17 +185,18 @@ const normalizeProject = (project: ProjectContext): ProjectContext => ({
     tools: project.defaults?.tools ?? projectSeed.defaults.tools,
   },
   permissions: { ...projectSeed.permissions, ...(project.permissions ?? {}) },
+  profile: { ...projectSeed.profile!, ...(project.profile ?? {}), capabilities: project.profile?.capabilities ?? [], instructions: project.profile?.instructions ?? projectSeed.profile!.instructions, commands: project.profile?.commands ?? {} },
 })
 
 const starterWorkflow: WorkflowRecord = {
-  id: 'implementation-quality-loop',
-  name: 'Implementation quality loop',
-  description: 'Implement, review in parallel, revise when required, and prepare a handoff.',
-  nodeCount: 5,
+  id: 'feature-delivery',
+  name: 'Feature delivery',
+  description: 'Ground the request, implement it in a bounded loop, verify it, and prepare an evidence-backed handoff.',
+  nodeCount: 4,
   status: 'ready',
   source: 'starter',
   entryMode: 'manual',
-  steps: ['Implement UI', 'Code review', 'Visual judge', 'Quality gate', 'Ship summary'],
+  steps: ['Repository intake', 'Implementation cycle', 'Verification suite', 'Release preparation'],
 }
 
 function nodeFromTemplate(
@@ -210,6 +226,11 @@ function nodeFromTemplate(
         execution: 'isolated',
         context: 'inherit',
         onFailure: 'bubble',
+      } : undefined,
+      module: template.moduleId ? {
+        moduleId: template.moduleId,
+        version: template.version,
+        mode: 'linked',
       } : undefined,
     },
   }
@@ -241,6 +262,21 @@ const edge = (
   ...options,
 })
 
+function snapshotWithSpecification(nodes: WorkflowNodeType[], edges: WorkflowEdgeType[]): RunGraphSnapshot {
+  const catalyst = nodes.find((node) => node.data.kind === 'catalyst')
+  const executable = nodes.filter((node) => node.data.kind !== 'catalyst')
+  const minX = Math.min(...executable.map((node) => node.position.x), 40)
+  const centerY = executable.length ? executable.reduce((sum, node) => sum + node.position.y, 0) / executable.length : 200
+  const shift = 360
+  const graphNodes: RunGraphSnapshot['nodes'] = nodes.map((node) => ({ id: node.id, label: node.data.label, kind: node.data.kind, x: catalyst && node.id === catalyst.id ? node.position.x : node.position.x + shift, y: node.position.y }))
+  graphNodes.push({ id: '__specification__', label: 'Specification preflight', kind: 'platform', x: catalyst ? minX + shift - 320 : minX, y: centerY })
+  const roots = executable.filter((node) => !edges.some((item) => item.target === node.id))
+  const graphEdges = edges.map((item) => catalyst && item.source === catalyst.id ? { id: `${item.id}-specified`, source: '__specification__', target: item.target, label: item.data?.label, tone: item.data?.tone } : { id: item.id, source: item.source, target: item.target, label: item.data?.label, tone: item.data?.tone })
+  if (catalyst) graphEdges.unshift({ id: 'catalyst-specification', source: catalyst.id, target: '__specification__', label: 'verified event', tone: 'success' })
+  else roots.forEach((root, index) => graphEdges.unshift({ id: `specification-${root.id}-${index}`, source: '__specification__', target: root.id, label: 'run spec', tone: 'success' }))
+  return { nodes: graphNodes, edges: graphEdges }
+}
+
 const initialEdges: WorkflowEdgeType[] = [
   edge('implement-review', 'implement', 'review', { data: { tone: 'success', trigger: 'always', payload: { mode: 'all' }, onBlocked: 'wait' } }),
   edge('implement-visual', 'implement', 'visual', { data: { tone: 'default', trigger: 'always', payload: { mode: 'all' }, onBlocked: 'wait' } }),
@@ -268,7 +304,10 @@ interface WorkspaceProps {
   project: ProjectContext
   onUpdateProject: (project: ProjectContext) => void
   components: ComponentTemplate[]
+  modules: WorkflowModuleDefinition[]
+  onCreateModule: (module: WorkflowModuleDefinition) => void
   onImportComponents: (components: ComponentTemplate[]) => void
+  onImportModules: (modules: WorkflowModuleDefinition[]) => void
   onNavigate: (page: AppPage) => void
   theme: 'dark' | 'light'
   onToggleTheme: () => void
@@ -280,67 +319,55 @@ interface WorkspaceProps {
   onToggleCatalyst: (id: string) => void
 }
 
-function graphFromTemplate(template: WorkflowTemplate | undefined, components: ComponentTemplate[]) {
+function graphFromTemplate(template: WorkflowTemplate | undefined, components: ComponentTemplate[], modules: WorkflowModuleDefinition[]) {
   if (!template) return { nodes: initialNodes, edges: initialEdges }
   const lookup = Object.fromEntries(components.map((component) => [component.id, component]))
-  const selected = template.componentIds.map((id) => lookup[id]).filter(Boolean)
+  const moduleLookup = Object.fromEntries(moduleComponentTemplates(modules).map((component) => [component.moduleId!, component]))
+  const selected = template.moduleIds?.length
+    ? template.moduleIds.map((id) => moduleLookup[id]).filter(Boolean)
+    : template.componentIds.map((id) => lookup[id]).filter(Boolean)
   if (!selected.length) return { nodes: initialNodes, edges: initialEdges }
-
-  if (template.id === 'ui-quality-loop' && selected.length >= 5) {
-    const [implement, review, visual, gate, ship] = selected
-    const nodes = [
-      nodeFromTemplate(implement, 'implement', { x: 40, y: 245 }),
-      nodeFromTemplate(review, 'review', { x: 445, y: 72 }),
-      nodeFromTemplate(visual, 'visual', { x: 445, y: 395 }),
-      nodeFromTemplate(gate, 'gate', { x: 840, y: 235 }),
-      nodeFromTemplate(ship, 'ship', { x: 1225, y: 235 }),
-    ]
-    const edges = [
-      edge('implement-review', 'implement', 'review', { data: { tone: 'success', trigger: 'always', payload: { mode: 'all' }, onBlocked: 'wait' } }),
-      edge('implement-visual', 'implement', 'visual', { data: { tone: 'default', trigger: 'always', payload: { mode: 'all' }, onBlocked: 'wait' } }),
-      edge('review-gate', 'review', 'gate', { data: { tone: 'success', trigger: 'always', payload: { mode: 'all' }, onBlocked: 'wait' } }),
-      edge('visual-gate', 'visual', 'gate', { data: { tone: 'default', trigger: 'always', payload: { mode: 'all' }, onBlocked: 'wait' } }),
-      edge('gate-ship', 'gate', 'ship', { data: { label: 'pass', tone: 'success', trigger: 'condition', condition: 'route == ship', payload: { mode: 'summary' }, onBlocked: 'wait' } }),
-      edge('gate-loop', 'gate', 'implement', { sourceHandle: 'source-bottom', targetHandle: 'target-bottom', data: { label: 'revise', tone: 'danger', trigger: 'condition', condition: 'route == revise', payload: { mode: 'all' }, onBlocked: 'wait', loop: { mode: 'bounded', maxIterations: 3, maxDurationMinutes: 30, stopOnNoProgress: 2, onExhausted: 'human' } } }),
-    ]
-    return { nodes, edges }
-  }
 
   const nodes = selected.map((component, index) => nodeFromTemplate(
     component,
     `${component.id}-${index + 1}`,
-    { x: 40 + (index % 3) * 390, y: 115 + Math.floor(index / 3) * 330 },
+    { x: 40 + index * 390, y: 235 },
   ))
   const edges = nodes.slice(0, -1).map((node, index) => edge(
     `${node.id}-${nodes[index + 1].id}`,
     node.id,
     nodes[index + 1].id,
     {
-      sourceHandle: index === 2 ? 'source-bottom' : undefined,
-      targetHandle: index === 2 ? 'target-bottom' : undefined,
-      data: { tone: 'default', trigger: 'always', payload: { mode: 'all' }, onBlocked: 'wait' },
+      data: {
+        tone: 'default',
+        trigger: 'always',
+        payload: { mode: 'all' },
+        onBlocked: 'wait',
+        handoff: { mode: 'structured', required: true, include: ['artifacts', 'decisions', 'verification', 'risks', 'open_questions', 'next_action'], onMissing: 'auto-summary' },
+      },
     },
   ))
   return { nodes, edges }
 }
 
-function Workspace({ project, onUpdateProject, components, onImportComponents, onNavigate, theme, onToggleTheme, onWorkflowSaved, onPrepareRun, startingTemplate, workflows, catalysts, onToggleCatalyst }: WorkspaceProps) {
-  const expectedWorkflowId = startingTemplate?.id ?? 'implementation-quality-loop'
+function Workspace({ project, onUpdateProject, components, modules, onCreateModule, onImportComponents, onImportModules, onNavigate, theme, onToggleTheme, onWorkflowSaved, onPrepareRun, startingTemplate, workflows, catalysts, onToggleCatalyst }: WorkspaceProps) {
+  const expectedWorkflowId = startingTemplate?.id ?? 'feature-delivery'
   const [startingDocument] = useState<WorkflowDocument | null>(() => readStored<WorkflowDocument | null>(
     'relay.workflow', null, (value): value is WorkflowDocument | null => value === null || isWorkflowDocument(value),
   ))
   const restoredDocument = startingDocument?.id === expectedWorkflowId ? startingDocument : null
   const startingGraph = restoredDocument
     ? { nodes: normalizeWorkflowNodes(restoredDocument.nodes), edges: restoredDocument.edges }
-    : graphFromTemplate(startingTemplate, components)
+    : graphFromTemplate(startingTemplate ?? builtInTemplates.find((template) => template.id === 'feature-delivery'), components, modules)
   const [nodes, setNodes, onNodesChange] = useNodesState(startingGraph.nodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(startingGraph.edges)
-  const [workflowName, setWorkflowName] = useState(restoredDocument?.name ?? startingTemplate?.name ?? 'Implementation quality loop')
+  const [workflowName, setWorkflowName] = useState(restoredDocument?.name ?? startingTemplate?.name ?? 'Feature delivery')
   const [workflowId] = useState(expectedWorkflowId)
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
   const [libraryOpen, setLibraryOpen] = useState(true)
   const [startRunOpen, setStartRunOpen] = useState(false)
+  const [moduleSaveOpen, setModuleSaveOpen] = useState(false)
   const [kickoffTask, setKickoffTask] = useState('')
   const [saveState, setSaveState] = useState<'saved' | 'saving'>('saved')
   const [toast, setToast] = useState<{ message: string; tone: 'success' | 'error' } | null>(null)
@@ -366,7 +393,9 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
       instruction: `Invoke saved workflow ${workflow.id}. The driver must resolve and validate it before execution.`,
       workflowId: workflow.id,
     })), [workflowId, workflows])
-  const authoringComponents = useMemo(() => [...platformComponents, ...components, ...workflowComponents], [components, workflowComponents])
+  const reusableModuleComponents = useMemo(() => moduleComponentTemplates(modules), [modules])
+  const moduleLookup = useMemo(() => Object.fromEntries(modules.map((module) => [module.id, module])), [modules])
+  const authoringComponents = useMemo(() => [...platformComponents, ...reusableModuleComponents, ...components, ...workflowComponents], [components, reusableModuleComponents, workflowComponents])
   const componentLookup = useMemo(() => Object.fromEntries(authoringComponents.map((item) => [item.id, item])), [authoringComponents])
   const catalystNodes = useMemo(() => nodes.filter((node) => node.data.kind === 'catalyst'), [nodes])
   const hasCatalyst = catalystNodes.length > 0
@@ -441,6 +470,61 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
     setSaveState('saving')
   }, [setNodes])
 
+  const saveAsModule = useCallback((draft: { name: string; description: string; inputs: string[]; outputs: string[] }) => {
+    const reusableNodes = nodes.filter((node) => node.data.kind !== 'catalyst')
+    if (!reusableNodes.length) {
+      showToast('Add at least one reusable component before saving a module.', 'error')
+      return
+    }
+    const reusableIds = new Set(reusableNodes.map((node) => node.id))
+    const reusableEdges = edges.filter((item) => reusableIds.has(item.source) && reusableIds.has(item.target))
+    const minX = Math.min(...reusableNodes.map((node) => node.position.x))
+    const minY = Math.min(...reusableNodes.map((node) => node.position.y))
+    const slug = draft.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
+    const definition: WorkflowModuleDefinition = {
+      id: slug,
+      name: draft.name.trim(),
+      description: draft.description.trim() || 'Reusable workflow module.',
+      version: '0.1.0', icon: 'workflow', color: 'cyan', tags: ['custom', 'module'],
+      inputs: draft.inputs, outputs: draft.outputs, source: 'user', createdAt: new Date().toISOString(),
+      nodes: reusableNodes.map((node) => ({ id: node.id, componentId: node.data.templateId, position: { x: node.position.x - minX, y: node.position.y - minY }, description: node.data.description })),
+      edges: reusableEdges.map((item) => ({ id: item.id, source: item.source, target: item.target, data: item.data })),
+      entryNodeIds: reusableNodes.filter((node) => !reusableEdges.some((item) => item.target === node.id)).map((node) => node.id),
+      exitNodeIds: reusableNodes.filter((node) => !reusableEdges.some((item) => item.source === node.id)).map((node) => node.id),
+    }
+    onCreateModule(definition)
+    setModuleSaveOpen(false)
+    showToast(`Saved ${definition.name} as a reusable module`)
+  }, [edges, nodes, onCreateModule, showToast])
+
+  const expandModule = useCallback((nodeId: string) => {
+    const container = nodes.find((node) => node.id === nodeId)
+    const definition = container?.data.module ? moduleLookup[container.data.module.moduleId] : undefined
+    if (!container || !definition) return
+    const stamp = Date.now()
+    const ids = Object.fromEntries(definition.nodes.map((item) => [item.id, `${nodeId}-${item.id}-${stamp}`]))
+    const expanded = definition.nodes.reduce<WorkflowNodeType[]>((result, item) => {
+      const template = componentLookup[item.componentId]
+      if (!template) return result
+      const child = nodeFromTemplate(template, ids[item.id], { x: container.position.x + item.position.x, y: container.position.y + item.position.y }, item.description)
+      result.push({ ...child, data: { ...child.data, module: child.data.module ? { ...child.data.module, mode: 'detached' } : undefined } })
+      return result
+    }, [])
+    if (!expanded.length) {
+      showToast('This module references components that are not available in the workspace.', 'error')
+      return
+    }
+    const internalEdges = definition.edges.map((item) => edge(`${nodeId}-${item.id}-${stamp}`, ids[item.source], ids[item.target], { data: item.data }))
+    const incoming = edges.filter((item) => item.target === nodeId).flatMap((item) => definition.entryNodeIds.map((entryId, index) => ({ ...item, id: `${item.id}-expanded-${index}-${stamp}`, target: ids[entryId] })))
+    const outgoing = edges.filter((item) => item.source === nodeId).flatMap((item) => definition.exitNodeIds.map((exitId, index) => ({ ...item, id: `${item.id}-expanded-${index}-${stamp}`, source: ids[exitId] })))
+    setNodes((current) => [...current.filter((node) => node.id !== nodeId), ...expanded])
+    setEdges((current) => [...current.filter((item) => item.source !== nodeId && item.target !== nodeId), ...internalEdges, ...incoming, ...outgoing])
+    setSelectedNodeId(null)
+    setSaveState('saving')
+    window.setTimeout(() => fitView({ padding: 0.15, duration: 450 }), 30)
+    showToast(`${definition.name} expanded into editable components`)
+  }, [componentLookup, edges, fitView, moduleLookup, nodes, setEdges, setNodes, showToast])
+
   const onConnect = useCallback((connection: Connection) => {
     if (nodes.some((node) => node.id === connection.target && node.data.kind === 'catalyst')) {
       showToast('A Catalyst is a starting point and cannot receive a transition.', 'error')
@@ -468,16 +552,48 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
     schemaVersion: '1.0',
     id: workflowId,
     name: workflowName,
-    description: 'Implement, review in parallel, revise when required, and prepare a handoff.',
+    description: startingTemplate?.description ?? 'A reusable agent workflow compiled into a project-specific run specification at execution time.',
+    template: startingTemplate ? {
+      id: startingTemplate.id,
+      name: startingTemplate.name,
+      requiredModuleIds: startingTemplate.moduleIds ?? [],
+      adaptationRules: startingTemplate.adaptationRules ?? [],
+    } : restoredDocument?.template,
     project,
     entry: hasCatalyst ? { mode: 'catalyst', nodeId: catalystNodes[0].id } : { mode: 'manual' },
+    specification: {
+      enabled: true,
+      componentId: 'workflow-specifier',
+      mode: 'guided',
+      artifact: 'run-spec.json',
+      maySelectOptionalModules: true,
+      mayBindProjectCommands: true,
+      mayConfigureNodes: true,
+      mayRemoveRequiredModules: false,
+      mayWidenPermissions: false,
+    },
     nodes: normalizeWorkflowNodes(nodes),
     edges,
     updatedAt: new Date().toISOString(),
-  }), [catalystNodes, edges, hasCatalyst, nodes, project, workflowId, workflowName])
+  }), [catalystNodes, edges, hasCatalyst, nodes, project, restoredDocument?.template, startingTemplate, workflowId, workflowName])
 
   const assignmentForExport = useCallback((): RelayAssignmentBundle => {
+    const workflowDocument = documentForExport()
     const usedTemplateIds = new Set(nodes.map((node) => node.data.templateId))
+    const usedModuleIds = new Set(nodes.map((node) => node.data.module?.moduleId).filter((id): id is string => Boolean(id)))
+    workflowDocument.template?.adaptationRules.forEach((rule) => usedModuleIds.add(rule.moduleId))
+    let discoveredNestedModule = true
+    while (discoveredNestedModule) {
+      discoveredNestedModule = false
+      modules.filter((module) => usedModuleIds.has(module.id)).forEach((module) => module.nodes.forEach((node) => {
+        if (!node.componentId.startsWith('module-')) return
+        const nestedId = node.componentId.slice('module-'.length)
+        if (!usedModuleIds.has(nestedId)) { usedModuleIds.add(nestedId); discoveredNestedModule = true }
+      }))
+    }
+    const usedModules = modules.filter((module) => usedModuleIds.has(module.id))
+    const internalTemplateIds = new Set(usedModules.flatMap((module) => module.nodes.map((node) => node.componentId)))
+    internalTemplateIds.add('workflow-specifier')
     const createdAt = new Date().toISOString()
     return {
       kind: 'relay.assignment',
@@ -488,8 +604,9 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
         task: kickoffTask || 'Complete the supplied task by executing the workflow graph and preserving its decision history.',
         createdAt,
       },
-      workflow: documentForExport(),
-      components: authoringComponents.filter((component) => component.kind !== 'catalyst' && usedTemplateIds.has(component.id)),
+      workflow: workflowDocument,
+      components: authoringComponents.filter((component) => component.kind !== 'catalyst' && component.kind !== 'module' && (usedTemplateIds.has(component.id) || internalTemplateIds.has(component.id))),
+      modules: usedModules,
       driver: {
         protocol: 'relay-driver-v1',
         role: 'Own the workflow state, dispatch configured agents, evaluate deterministic routes, persist every event, and stop only under the declared policy.',
@@ -498,6 +615,17 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
         eventLog: '.relay/runs/{{run.id}}/events.jsonl',
         artifactDirectory: '.relay/runs/{{run.id}}/artifacts',
         checkpointAfterEachNode: true,
+        specification: {
+          enabled: true,
+          componentId: 'workflow-specifier',
+          mode: 'guided',
+          artifact: 'run-spec.json',
+          maySelectOptionalModules: true,
+          mayBindProjectCommands: true,
+          mayConfigureNodes: true,
+          mayRemoveRequiredModules: false,
+          mayWidenPermissions: false,
+        },
         defaultModel: project.defaults.model,
         defaultEffort: project.defaults.effort,
         tools: project.defaults.tools,
@@ -512,7 +640,7 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
         },
       },
     }
-  }, [authoringComponents, documentForExport, kickoffTask, nodes, project, workflowName])
+  }, [authoringComponents, documentForExport, kickoffTask, modules, nodes, project, workflowName])
 
   const saveWorkflow = useCallback(async () => {
     if (!workflowName.trim()) {
@@ -532,7 +660,7 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
     onWorkflowSaved({
       id: workflowId,
       name: workflowName,
-      description: 'Implement, review in parallel, revise when required, and prepare a handoff.',
+      description: startingTemplate?.description ?? 'Reusable workflow with a run-specific specification preflight.',
       nodeCount: nodes.length,
       projectName: project.root ? project.name : undefined,
       updatedAt: new Date().toISOString(),
@@ -545,7 +673,7 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
     setSaveState('saved')
     showToast('Workflow saved locally')
     return true
-  }, [documentForExport, isCatalystEntrypointValid, nodes, onWorkflowSaved, project.name, project.root, showToast, workflowId, workflowName])
+  }, [documentForExport, isCatalystEntrypointValid, nodes, onWorkflowSaved, project.name, project.root, showToast, startingTemplate?.description, workflowId, workflowName])
 
   const exportWorkflow = useCallback(() => {
     const blob = new Blob([JSON.stringify(assignmentForExport(), null, 2)], { type: 'application/json' })
@@ -604,13 +732,15 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
     if (!validateWorkflow()) return
     const saved = await saveWorkflow()
     if (!saved) return
+    const runId = `run-${Date.now()}`
     onPrepareRun({
-      id: `run-${Date.now()}`,
+      id: runId,
       workflowId,
       workflowName,
       projectName: project.root ? project.name : undefined,
       configuration: {
         task: 'Objective and context will be supplied by the verified catalyst event.',
+        specificationMode: 'adaptive',
         autonomy: 'adaptive',
         allowAdjacentFixes: true,
         retryFailures: true,
@@ -619,10 +749,8 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
       createdAt: new Date().toISOString(),
       state: 'staged',
       preparedBy: 'catalyst',
-      graph: {
-        nodes: nodes.map((node) => ({ id: node.id, label: node.data.label, kind: node.data.kind, x: node.position.x, y: node.position.y })),
-        edges: edges.map((item) => ({ id: item.id, source: item.source, target: item.target, label: item.data?.label, tone: item.data?.tone })),
-      },
+      specification: { phase: 0, status: 'pending', componentId: 'workflow-specifier', artifact: `.relay/runs/${runId}/run-spec.json` },
+      graph: snapshotWithSpecification(nodes, edges),
     })
     onNavigate('runs')
   }, [edges, nodes, onNavigate, onPrepareRun, project.name, project.root, saveWorkflow, validateWorkflow, workflowId, workflowName])
@@ -630,11 +758,12 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
   const importWorkflow = useCallback(async (file: File) => {
     try {
       if (file.size > 5 * 1024 * 1024) throw new Error('The file is larger than the 5 MB import limit.')
-      const { workflow: imported, components: importedComponents } = parseWorkflowImport(await file.text())
+      const { workflow: imported, components: importedComponents, modules: importedModules } = parseWorkflowImport(await file.text())
       setNodes(normalizeWorkflowNodes(imported.nodes))
       setEdges(imported.edges)
       onUpdateProject(normalizeProject(imported.project))
       if (importedComponents.length) onImportComponents(importedComponents)
+      if (importedModules.length) onImportModules(importedModules)
       setWorkflowName(imported.name)
       setSelectedNodeId(null)
       setSelectedEdgeId(null)
@@ -643,12 +772,13 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'Could not import this workflow.', 'error')
     }
-  }, [fitView, onImportComponents, onUpdateProject, setEdges, setNodes, showToast])
+  }, [fitView, onImportComponents, onImportModules, onUpdateProject, setEdges, setNodes, showToast])
 
   const runWorkflow = useCallback(async (configuration: RunConfiguration) => {
     setKickoffTask(configuration.task)
+    const runId = `run-${Date.now()}`
     onPrepareRun({
-      id: `run-${Date.now()}`,
+      id: runId,
       workflowId,
       workflowName,
       projectName: project.root ? project.name : undefined,
@@ -656,10 +786,8 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
       createdAt: new Date().toISOString(),
       state: 'staged',
       preparedBy: 'user',
-      graph: {
-        nodes: nodes.map((node) => ({ id: node.id, label: node.data.label, kind: node.data.kind, x: node.position.x, y: node.position.y })),
-        edges: edges.map((item) => ({ id: item.id, source: item.source, target: item.target, label: item.data?.label, tone: item.data?.tone })),
-      },
+      specification: { phase: 0, status: 'pending', componentId: 'workflow-specifier', artifact: `.relay/runs/${runId}/run-spec.json` },
+      graph: snapshotWithSpecification(nodes, edges),
     })
     showToast('Workflow staged — start it from Runs when ready')
     await sleep(450)
@@ -712,6 +840,7 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
             {overflowOpen && <div className="overflow-menu" role="menu">
               <button role="menuitem" onClick={() => { importInput.current?.click(); setOverflowOpen(false) }}><Import size={15} /><span><strong>Import workflow</strong><small>Open a JSON or Relay assignment</small></span></button>
               <button role="menuitem" onClick={() => { exportWorkflow(); setOverflowOpen(false) }}><Download size={15} /><span><strong>Export assignment</strong><small>Download the driver-ready bundle</small></span></button>
+              <button role="menuitem" onClick={() => { setModuleSaveOpen(true); setOverflowOpen(false) }}><Layers3 size={15} /><span><strong>Save as reusable module</strong><small>Reuse this graph inside other workflows</small></span></button>
               <button role="menuitem" onClick={() => { onNavigate('runs'); setOverflowOpen(false) }}><Cloud size={15} /><span><strong>View runs</strong><small>Open live and prepared runs</small></span></button>
               <button role="menuitem" onClick={() => { onToggleTheme(); setOverflowOpen(false) }}>{theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}<span><strong>{theme === 'dark' ? 'Light mode' : 'Dark mode'}</strong><small>Change the interface appearance</small></span></button>
             </div>}
@@ -729,6 +858,7 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
         )}
 
         <section className="canvas-shell">
+          <div className="specification-strip"><span><Sparkles size={14} /></span><div><strong>Specification preflight</strong><small>At run start, Relay writes <code>run-spec.json</code> for this objective and project before entering the graph.</small></div><em>{startingTemplate?.adaptationRules?.length ?? 0} adaptive rules</em></div>
           <WorkflowToolbar
             minimapVisible={minimapVisible}
             onFitView={() => void fitView({ padding: 0.17, duration: 450 })}
@@ -781,6 +911,8 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
           onOpenProjectConfig={() => void openProjectConfig()}
           onOpenCatalysts={() => void stageCatalystWorkflow()}
           onToggleCatalyst={onToggleCatalyst}
+          modules={modules}
+          onExpandModule={expandModule}
         />
         <TransitionInspector
           edge={selectedEdge}
@@ -792,11 +924,31 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
         />
       </div>
       {startRunOpen && <StartRunModal workflowName={workflowName} projectName={project.name} onClose={() => setStartRunOpen(false)} onStart={(configuration) => { setStartRunOpen(false); void runWorkflow(configuration) }} />}
+      {moduleSaveOpen && <SaveModuleModal workflowName={workflowName} onClose={() => setModuleSaveOpen(false)} onSave={saveAsModule} />}
       {toast && <div className={`toast ${toast.tone}`} role="status" aria-live="polite">
         {toast.tone === 'error' ? <AlertCircle size={15} /> : <Check size={15} />} {toast.message}
       </div>}
     </main>
   )
+}
+
+function SaveModuleModal({ workflowName, onClose, onSave }: { workflowName: string; onClose: () => void; onSave: (draft: { name: string; description: string; inputs: string[]; outputs: string[] }) => void }) {
+  const [name, setName] = useState(`${workflowName} module`)
+  const [description, setDescription] = useState('')
+  const [inputs, setInputs] = useState('objective, project_context')
+  const [outputs, setOutputs] = useState('result, artifacts')
+  const split = (value: string) => value.split(',').map((item) => item.trim()).filter(Boolean)
+  return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+    <form className="save-module-modal" role="dialog" aria-modal="true" aria-labelledby="save-module-title" onSubmit={(event) => { event.preventDefault(); if (name.trim()) onSave({ name: name.trim(), description: description.trim(), inputs: split(inputs), outputs: split(outputs) }) }}>
+      <header className="modal-heading"><div><span className="eyebrow">Reusable composition</span><h2 id="save-module-title">Save workflow as a module</h2><p>The current graph, internal routes, loops, and handoffs become one linked node.</p></div><button type="button" className="icon-button" onClick={onClose} aria-label="Close module dialog"><X size={17} /></button></header>
+      <div className="editor-form module-save-fields">
+        <label><span>Module name</span><input autoFocus value={name} onChange={(event) => setName(event.target.value)} /></label>
+        <label><span>Description</span><textarea rows={3} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Explain the reusable job this module completes." /></label>
+        <div className="two-column"><label><span>Public inputs</span><input value={inputs} onChange={(event) => setInputs(event.target.value)} /></label><label><span>Public outputs</span><input value={outputs} onChange={(event) => setOutputs(event.target.value)} /></label></div>
+      </div>
+      <footer className="modal-footer"><div><Layers3 size={15} /><small>Project paths and temporary objectives remain outside the module.</small></div><button type="button" className="secondary-cta" onClick={onClose}>Cancel</button><button className="primary-cta" type="submit" disabled={!name.trim()}>Save module</button></footer>
+    </form>
+  </div>
 }
 
 function GitFlowIcon() {
@@ -813,7 +965,16 @@ export default function App() {
   const [customComponents, setCustomComponents] = useState<ComponentTemplate[]>(() => readStored(
     'relay.components', [], (value): value is ComponentTemplate[] => Array.isArray(value) && value.every(isComponentTemplate),
   ))
-  const [workflows, setWorkflows] = useState<WorkflowRecord[]>(() => readStored('relay.workflows', [starterWorkflow], isWorkflowRecordList))
+  const [customModules, setCustomModules] = useState<WorkflowModuleDefinition[]>(() => readStored(
+    'relay.modules', [], (value): value is WorkflowModuleDefinition[] => Array.isArray(value) && value.every(isWorkflowModuleDefinition),
+  ))
+  const [workflows, setWorkflows] = useState<WorkflowRecord[]>(() => {
+    const saved = readStored('relay.workflows', [starterWorkflow], isWorkflowRecordList)
+    const onlyLegacyStarter = saved.length === 1
+      && saved[0].id === 'implementation-quality-loop'
+      && saved[0].source === 'starter'
+    return onlyLegacyStarter ? [starterWorkflow] : saved
+  })
   const [userTemplates, setUserTemplates] = useState<WorkflowTemplate[]>(() => readStored('relay.userTemplates', [], isWorkflowTemplateList))
   const [builderTemplate, setBuilderTemplate] = useState<WorkflowTemplate | undefined>(undefined)
   const [stagedRuns, setStagedRuns] = useState<PendingRun[]>(() => {
@@ -837,6 +998,10 @@ export default function App() {
     const customIds = new Set(customComponents.map((item) => item.id))
     return [...componentLibrary.filter((item) => !customIds.has(item.id)), ...customComponents]
   }, [customComponents])
+  const modules = useMemo(() => {
+    const customIds = new Set(customModules.map((item) => item.id))
+    return [...builtInModules.filter((item) => !customIds.has(item.id)), ...customModules]
+  }, [customModules])
 
   useEffect(() => {
     const onHashChange = () => setPage(pageFromHash())
@@ -845,6 +1010,7 @@ export default function App() {
   }, [])
   useEffect(() => { writeStored('relay.project', project) }, [project])
   useEffect(() => { writeStored('relay.components', customComponents) }, [customComponents])
+  useEffect(() => { writeStored('relay.modules', customModules) }, [customModules])
   useEffect(() => { writeStored('relay.workflows', workflows) }, [workflows])
   useEffect(() => { writeStored('relay.userTemplates', userTemplates) }, [userTemplates])
   useEffect(() => { writeStored('relay.catalysts', catalysts) }, [catalysts])
@@ -868,17 +1034,23 @@ export default function App() {
       return [...merged.values()]
     })
   }
+  const mergeModules = (incoming: WorkflowModuleDefinition[]) => {
+    const builtInIds = new Set(builtInModules.map((item) => item.id))
+    setCustomModules((current) => {
+      const merged = new Map(current.map((item) => [item.id, item]))
+      incoming.filter((item) => !builtInIds.has(item.id)).forEach((item) => merged.set(item.id, { ...item, source: 'user' }))
+      return [...merged.values()]
+    })
+  }
 
   const stageSavedWorkflow = (workflow: WorkflowRecord, configuration: RunConfiguration) => {
     const savedDocument = readStored<WorkflowDocument | null>(
       'relay.workflow', null, (value): value is WorkflowDocument | null => value === null || isWorkflowDocument(value),
     )
-    const graph = savedDocument?.id === workflow.id ? {
-      nodes: savedDocument.nodes.map((node) => ({ id: node.id, label: node.data.label, kind: node.data.kind, x: node.position.x, y: node.position.y })),
-      edges: savedDocument.edges.map((item) => ({ id: item.id, source: item.source, target: item.target, label: item.data?.label, tone: item.data?.tone })),
-    } : undefined
+    const graph = savedDocument?.id === workflow.id ? snapshotWithSpecification(savedDocument.nodes, savedDocument.edges) : undefined
+    const runId = `run-${Date.now()}`
     const run: PendingRun = {
-      id: `run-${Date.now()}`,
+      id: runId,
       workflowId: workflow.id,
       workflowName: workflow.name,
       projectName: workflow.projectName ?? (project.root ? project.name : undefined),
@@ -886,6 +1058,7 @@ export default function App() {
       createdAt: new Date().toISOString(),
       state: 'staged',
       preparedBy: 'user',
+      specification: { phase: 0, status: 'pending', componentId: 'workflow-specifier', artifact: `.relay/runs/${runId}/run-spec.json` },
       graph,
     }
     setStagedRuns((current) => [run, ...current.filter((item) => item.id !== run.id)])
@@ -900,7 +1073,10 @@ export default function App() {
           project={project}
           onUpdateProject={setProject}
           components={components}
+          modules={modules}
+          onCreateModule={(module) => setCustomModules((current) => [module, ...current.filter((item) => item.id !== module.id)])}
           onImportComponents={mergeComponents}
+          onImportModules={mergeModules}
           onNavigate={navigate}
           theme={theme}
           onToggleTheme={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')}
@@ -922,6 +1098,7 @@ export default function App() {
       project={project}
       onUpdateProject={setProject}
       components={components}
+      modules={modules}
       onCreateComponent={(component) => setCustomComponents((current) => [...current.filter((item) => item.id !== component.id), component])}
       theme={theme}
       onToggleTheme={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')}

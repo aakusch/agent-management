@@ -1,4 +1,4 @@
-import { GitBranch, PackageOpen, RotateCcw, Route, TimerReset, X } from 'lucide-react'
+import { GitBranch, MessageSquareText, PackageOpen, RotateCcw, Route, TimerReset, X } from 'lucide-react'
 import type { WorkflowEdge, WorkflowEdgeData, WorkflowNode } from '../types/workflow'
 
 interface TransitionInspectorProps {
@@ -18,6 +18,22 @@ const defaultLoop: NonNullable<WorkflowEdgeData['loop']> = {
   onExhausted: 'human',
 }
 
+const defaultHandoff: NonNullable<WorkflowEdgeData['handoff']> = {
+  mode: 'structured',
+  required: true,
+  include: ['artifacts', 'decisions', 'verification', 'risks', 'open_questions', 'next_action'],
+  onMissing: 'auto-summary',
+}
+
+const handoffFields: { id: NonNullable<WorkflowEdgeData['handoff']>['include'][number]; label: string }[] = [
+  { id: 'artifacts', label: 'Changed files and artifacts' },
+  { id: 'decisions', label: 'Decisions and rationale' },
+  { id: 'verification', label: 'Commands and results' },
+  { id: 'risks', label: 'Risks and assumptions' },
+  { id: 'open_questions', label: 'Open questions' },
+  { id: 'next_action', label: 'Recommended next action' },
+]
+
 export function TransitionInspector({
   edge,
   sourceNode,
@@ -32,11 +48,15 @@ export function TransitionInspector({
   const trigger = data.trigger ?? (data.condition ? 'condition' : 'always')
   const payload = data.payload ?? { mode: 'all' as const }
   const loop = data.loop
+  const handoff = data.handoff
   const updatePayload = (patch: Partial<NonNullable<WorkflowEdgeData['payload']>>) => {
     onUpdateEdge(edge.id, { payload: { ...payload, ...patch } })
   }
   const updateLoop = (patch: Partial<NonNullable<WorkflowEdgeData['loop']>>) => {
     onUpdateEdge(edge.id, { loop: { ...(loop ?? defaultLoop), ...patch } })
+  }
+  const updateHandoff = (patch: Partial<NonNullable<WorkflowEdgeData['handoff']>>) => {
+    onUpdateEdge(edge.id, { handoff: { ...(handoff ?? defaultHandoff), ...patch } })
   }
 
   return (
@@ -121,6 +141,20 @@ export function TransitionInspector({
               </select>
             </label>
           </div>
+        </section>
+
+        <section className="form-section handoff-section">
+          <div className="section-toggle">
+            <div><h3><MessageSquareText size={14} /> Agent-authored handoff</h3><p>Ask the previous agent to brief this specific next step.</p></div>
+            <button className={`mini-toggle ${handoff ? 'on' : ''}`} onClick={() => onUpdateEdge(edge.id, { handoff: handoff ? undefined : defaultHandoff })} aria-pressed={Boolean(handoff)}><i /> {handoff ? 'On' : 'Off'}</button>
+          </div>
+          {handoff && <div className="handoff-fields">
+            <label><span>Format</span><select value={handoff.mode} onChange={(event) => updateHandoff({ mode: event.target.value as typeof handoff.mode })}><option value="structured">Structured handoff</option><option value="concise">Concise briefing</option><option value="custom">Custom request</option></select></label>
+            <div className="handoff-checklist"><span>Include</span>{handoffFields.map((field) => { const checked = handoff.include.includes(field.id); return <label key={field.id}><input type="checkbox" checked={checked} onChange={() => updateHandoff({ include: checked ? handoff.include.filter((item) => item !== field.id) : [...handoff.include, field.id] })} /> {field.label}</label> })}</div>
+            {(handoff.mode === 'custom' || handoff.instruction) && <label><span>Additional request <em>Optional</em></span><textarea rows={3} value={handoff.instruction ?? ''} onChange={(event) => updateHandoff({ instruction: event.target.value })} placeholder="Tell the next agent what matters most at this boundary…" /></label>}
+            <div className="form-row"><label><span>If handoff is missing</span><select value={handoff.onMissing} onChange={(event) => updateHandoff({ onMissing: event.target.value as typeof handoff.onMissing })}><option value="auto-summary">Generate fallback summary</option><option value="block">Block transition</option></select></label><label className="required-handoff"><span>Required</span><span className="checkbox-line"><input type="checkbox" checked={handoff.required} onChange={(event) => updateHandoff({ required: event.target.checked })} /> Validate before continuing</span></label></div>
+          </div>}
+          {!handoff && <p className="form-hint">Context can still pass mechanically. Enable this when the next agent needs decisions, risks, and intent explained by its predecessor.</p>}
         </section>
 
         <section className="form-section">

@@ -26,8 +26,8 @@ function help() {
   process.stdout.write(`Relay workflow authoring\n\n`)
   process.stdout.write(`  relay-workflow create <file> --name <name> [--project-root <path>]\n`)
   process.stdout.write(`  relay-workflow inspect <file>\n`)
-  process.stdout.write(`  relay-workflow add-node <file> --id <id> --name <label> --component <id> [--kind agent] [--instruction <text>]\n`)
-  process.stdout.write(`  relay-workflow connect <file> --from <node> --to <node> [--label <label>] [--condition <expression>] [--loop <count>]\n`)
+  process.stdout.write(`  relay-workflow add-node <file> --id <id> --name <label> --component <id> [--kind agent] [--module <module-id>] [--instruction <text>]\n`)
+  process.stdout.write(`  relay-workflow connect <file> --from <node> --to <node> [--label <label>] [--condition <expression>] [--loop <count>] [--handoff structured]\n`)
   process.stdout.write(`  relay-workflow validate <file>\n`)
   process.stdout.write(`  relay-workflow stage <file> --objective <prompt> [--out <file>]\n`)
 }
@@ -80,8 +80,11 @@ async function main() {
         name: String(flags.project || 'Project'), root: String(flags['project-root'] || ''), branch: String(flags.branch || ''), variables: {},
         defaults: { model: 'auto', effort: 'medium', maxParallelAgents: 3, tools: ['filesystem', 'terminal', 'git'] },
         permissions: { spawnAgents: true, shell: 'project', network: 'ask', publish: 'ask' },
+        profile: { status: 'not-scanned', structure: 'unknown', packageManager: 'auto', capabilities: [], instructions: ['AGENTS.md', 'CLAUDE.md'], commands: {} },
       },
-      entry: { mode: 'manual' }, nodes: [], edges: [], updatedAt: new Date().toISOString(),
+      entry: { mode: 'manual' },
+      specification: { enabled: true, componentId: 'workflow-specifier', mode: 'guided', artifact: 'run-spec.json', maySelectOptionalModules: true, mayBindProjectCommands: true, mayConfigureNodes: true, mayRemoveRequiredModules: false, mayWidenPermissions: false },
+      nodes: [], edges: [], updatedAt: new Date().toISOString(),
     }
     await save(fileArg, workflow)
     process.stdout.write(`Created ${resolve(fileArg)}\n`)
@@ -107,11 +110,13 @@ async function main() {
     if (!id || !name || !component) return fail('--id, --name, and --component are required')
     if (workflow.nodes.some((node) => node.id === id)) return fail(`node ${id} already exists`)
     const index = workflow.nodes.length
+    const moduleId = flags.module ? String(flags.module) : undefined
     workflow.nodes.push({
       id, type: 'workflow', position: { x: 40 + (index % 3) * 390, y: 100 + Math.floor(index / 3) * 260 },
       data: {
         label: name, description: String(flags.description || ''), templateId: component, kind: String(flags.kind || 'agent'),
-        icon: String(flags.icon || 'bot'), color: String(flags.color || 'mint'), status: 'idle', instruction: String(flags.instruction || ''), overrides: {}, execution: {},
+        icon: String(flags.icon || (moduleId ? 'workflow' : 'bot')), color: String(flags.color || 'mint'), status: 'idle', instruction: String(flags.instruction || ''), overrides: {}, execution: {},
+        module: moduleId ? { moduleId, version: String(flags.version || '1.0.0'), mode: 'linked' } : undefined,
       },
     })
     workflow.updatedAt = new Date().toISOString()
@@ -127,11 +132,13 @@ async function main() {
     if (workflow.edges.some((edge) => edge.id === id)) return fail(`transition ${id} already exists`)
     const condition = flags.condition ? String(flags.condition) : undefined
     const loopCount = flags.loop ? Number(flags.loop) : undefined
+    const handoffMode = flags.handoff ? String(flags.handoff) : undefined
     workflow.edges.push({
       id, source: from, target: to, type: 'workflow',
       data: {
         label: flags.label ? String(flags.label) : undefined, trigger: condition ? 'condition' : 'always', condition,
         tone: loopCount ? 'danger' : 'default', payload: { mode: 'all' }, onBlocked: 'wait',
+        handoff: handoffMode ? { mode: handoffMode, required: true, include: ['artifacts', 'decisions', 'verification', 'risks', 'open_questions', 'next_action'], onMissing: 'auto-summary' } : undefined,
         loop: loopCount ? { mode: 'bounded', maxIterations: loopCount, stopOnNoProgress: 2, onExhausted: 'human' } : undefined,
       },
     })
@@ -149,7 +156,8 @@ async function main() {
     const output = String(flags.out || `.relay/runs/staged/${runId}.json`)
     await save(output, {
       kind: 'relay.staged-run', schemaVersion: '1.0', id: runId, workflow: resolve(fileArg), objective,
-      configuration: { autonomy: String(flags.autonomy || 'adaptive'), execution: String(flags.execution || 'execute') },
+      configuration: { autonomy: String(flags.autonomy || 'adaptive'), execution: String(flags.execution || 'execute'), specificationMode: String(flags.specification || 'adaptive') },
+      specification: { phase: 0, componentId: 'workflow-specifier', artifact: `.relay/runs/${runId}/run-spec.json`, status: 'pending' },
       createdAt: new Date().toISOString(), preparedBy: 'agent',
     })
     process.stdout.write(`Staged ${resolve(output)}\n`)

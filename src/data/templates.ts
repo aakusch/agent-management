@@ -1,74 +1,11 @@
 import type { WorkflowTemplate } from '../types/catalog'
 
-export const builtInTemplates: WorkflowTemplate[] = [
-  {
-    id: 'feature-delivery',
-    name: 'Feature delivery',
-    description: 'Map the repository, plan a change, implement it, run project checks, review the patch, and prepare a handoff.',
-    level: 'Guided',
-    steps: ['Repository map', 'Change plan', 'Implement', 'Project checks', 'Code review', 'Handoff'],
-    componentIds: ['repository-map', 'change-planner', 'implement-ui', 'project-checks', 'code-review', 'summarize'],
-    source: 'built-in',
-    published: true,
-  },
-  {
-    id: 'ui-quality-loop',
-    name: 'UI quality loop',
-    description: 'Implement an interface, review code and visuals in parallel, then revise or prepare the final handoff.',
-    level: 'Guided',
-    steps: ['Implement', 'Code review', 'Browser QA', 'Quality gate', 'Handoff'],
-    componentIds: ['implement-ui', 'code-review', 'browser-qa', 'decision-gate', 'summarize'],
-    source: 'built-in',
-    published: true,
-  },
-  {
-    id: 'bug-fix-lane',
-    name: 'Bug fix lane',
-    description: 'Reproduce a defect, isolate its cause, make a focused correction, and verify against regressions.',
-    level: 'Guided',
-    steps: ['Reproduce', 'Root cause', 'Implement fix', 'Targeted tests', 'Regression review'],
-    componentIds: ['bug-reproducer', 'change-planner', 'implement-ui', 'test-runner', 'code-review'],
-    source: 'built-in',
-    published: true,
-  },
-  {
-    id: 'monorepo-change',
-    name: 'Cross-repository change',
-    description: 'Map impact across related repositories, dispatch scoped changes in parallel, and verify the integration boundary.',
-    level: 'Advanced',
-    steps: ['Impact map', 'Plan per repo', 'Parallel implementation', 'Integration review', 'Handoff'],
-    componentIds: ['cross-repo-impact', 'change-planner', 'implement-ui', 'integration-review', 'summarize'],
-    source: 'built-in',
-    published: true,
-  },
-  {
-    id: 'release-readiness',
-    name: 'Release readiness',
-    description: 'Fan out build, test, migration, dependency, and documentation checks before requesting approval.',
-    level: 'Advanced',
-    steps: ['Project checks', 'Migration review', 'Dependency audit', 'Docs sync', 'Release gate', 'Approval'],
-    componentIds: ['project-checks', 'database-migration-review', 'dependency-audit', 'docs-sync', 'release-readiness', 'human-approval'],
-    source: 'built-in',
-    published: true,
-  },
-  {
-    id: 'repository-onboarding',
-    name: 'Repository onboarding',
-    description: 'Turn an unfamiliar repository into a concise architecture, command, convention, and risk guide.',
-    level: 'Guided',
-    steps: ['Repository map', 'Instructions', 'Architecture summary', 'Docs handoff'],
-    componentIds: ['repository-map', 'change-planner', 'docs-sync', 'summarize'],
-    source: 'built-in',
-    published: true,
-  },
-  {
-    id: 'performance-investigation',
-    name: 'Performance investigation',
-    description: 'Establish a baseline, profile the relevant path, compare evidence, and recommend measured changes.',
-    level: 'Advanced',
-    steps: ['Repository map', 'Baseline', 'Benchmark review', 'Change plan', 'Verification'],
-    componentIds: ['repository-map', 'project-checks', 'benchmark-review', 'change-planner', 'test-runner'],
-    source: 'built-in',
-    published: true,
-  },
-]
+const templateFiles = import.meta.glob('../../templates/*.json', {
+  eager: true,
+  query: '?raw',
+  import: 'default',
+}) as Record<string, string>
+
+export const builtInTemplates = Object.values(templateFiles)
+  .flatMap((raw) => JSON.parse(raw) as WorkflowTemplate[])
+  .sort((a, b) => a.name.localeCompare(b.name))

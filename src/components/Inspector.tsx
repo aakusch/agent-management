@@ -6,15 +6,17 @@ import {
   ExternalLink,
   FileText,
   FolderGit2,
+  GitFork,
   Layers3,
   RotateCcw,
   Settings2,
   SlidersHorizontal,
   Wrench,
+  Workflow,
   X,
   Zap,
 } from 'lucide-react'
-import type { ProjectContext, ReasoningEffort, RelayTool, WorkflowNode } from '../types/workflow'
+import type { ProjectContext, ReasoningEffort, RelayTool, WorkflowModuleDefinition, WorkflowNode } from '../types/workflow'
 import type { CatalystDefinition } from '../types/catalog'
 import { describeCatalyst } from '../lib/catalysts'
 
@@ -29,6 +31,8 @@ interface InspectorProps {
   onOpenProjectConfig: () => void
   onOpenCatalysts: () => void
   onToggleCatalyst: (id: string) => void
+  modules: WorkflowModuleDefinition[]
+  onExpandModule: (nodeId: string) => void
 }
 
 const effortOptions: { id: ReasoningEffort; label: string; detail: string }[] = [
@@ -46,7 +50,7 @@ const toolOptions: { id: RelayTool; label: string }[] = [
   { id: 'web', label: 'Web' },
 ]
 
-export function Inspector({ node, project, sourceInstruction, catalysts, workflowId, onClose, onUpdateNode, onOpenProjectConfig, onOpenCatalysts, onToggleCatalyst }: InspectorProps) {
+export function Inspector({ node, project, sourceInstruction, catalysts, workflowId, onClose, onUpdateNode, onOpenProjectConfig, onOpenCatalysts, onToggleCatalyst, modules, onExpandModule }: InspectorProps) {
   const [tab, setTab] = useState<'setup' | 'prompt' | 'source'>('setup')
   if (!node) return null
 
@@ -58,6 +62,8 @@ export function Inspector({ node, project, sourceInstruction, catalysts, workflo
   const supportsAgentRuntime = node.data.kind === 'agent' || node.data.kind === 'judge'
   const supportsTools = supportsAgentRuntime || node.data.kind === 'tool'
   const isCatalyst = node.data.kind === 'catalyst'
+  const isModule = node.data.kind === 'module'
+  const isLogic = node.data.kind === 'router'
 
   const updateExecution = <Key extends keyof NonNullable<WorkflowNode['data']['execution']>>(
     key: Key,
@@ -78,6 +84,7 @@ export function Inspector({ node, project, sourceInstruction, catalysts, workflo
     const custom = execution.tools ?? [...project.defaults.tools]
     updateExecution('tools', custom.includes(tool) ? custom.filter((item) => item !== tool) : [...custom, tool])
   }
+  const updateOverride = (key: string, value: string) => onUpdateNode(node.id, { overrides: { ...node.data.overrides, [key]: value } })
 
   if (isCatalyst) {
     const availableCatalysts = catalysts.filter((catalyst) => catalyst.workflowId === workflowId)
@@ -105,6 +112,22 @@ export function Inspector({ node, project, sourceInstruction, catalysts, workflo
           </> : <div className="catalyst-binding-empty"><p>No Catalyst has been configured for this workflow yet.</p><button className="secondary-cta" onClick={onOpenCatalysts}>Configure catalyst <ChevronRight size={13} /></button></div>}
         </section>
         <p className="platform-entry-hint">Connect this node to the first executable component, then use <strong>Stage</strong> to save the workflow and configure its hook, connector event, schedule, or query.</p>
+      </div>
+    </aside>
+  }
+
+  if (isModule) {
+    const definition = modules.find((module) => module.id === node.data.module?.moduleId)
+    return <aside className="inspector-panel component-inspector module-inspector">
+      <div className="inspector-heading component-inspector-heading"><div className="inspector-component-title"><span className={`inspector-kind tone-${node.data.color}`}><Layers3 size={15} /></span><div><span className="eyebrow">Reusable module</span><h2>{node.data.label}</h2></div></div><button className="icon-button" onClick={onClose} aria-label="Close module inspector"><X size={17} /></button></div>
+      <div className="inspector-scroll">
+        <section className="module-instance-card"><div><span className="status-chip ready">Linked · v{definition?.version ?? node.data.module?.version}</span><p>{definition?.description ?? node.data.description}</p></div><label><span>Name in this workflow</span><input value={node.data.label} onChange={(event) => onUpdateNode(node.id, { label: event.target.value })} /></label></section>
+        {definition && <>
+          <section className="inspector-section-card module-contract-card"><div className="inspector-section-heading"><span><Layers3 size={14} /></span><div><h3>Public contract</h3><p>Only these values cross the module boundary.</p></div></div><div className="module-port-list"><div><span>Inputs</span>{definition.inputs.map((item) => <code key={item}>{item}</code>)}</div><div><span>Outputs</span>{definition.outputs.map((item) => <code key={item}>{item}</code>)}</div></div></section>
+          <section className="inspector-section-card module-contents-card"><div className="inspector-section-heading"><span><Workflow size={14} /></span><div><h3>Inside this module</h3><p>{definition.nodes.length} components · {definition.edges.length} transitions</p></div></div><ol>{definition.nodes.map((item, index) => <li key={item.id}><span>{index + 1}</span><div><strong>{item.id.replaceAll('-', ' ')}</strong><small>{item.componentId}</small></div></li>)}</ol></section>
+          <button className="expand-module-button" onClick={() => onExpandModule(node.id)}><Layers3 size={14} /><span><strong>Expand into editable components</strong><small>Detach a copy inside this workflow. The saved module remains unchanged.</small></span><ChevronRight size={14} /></button>
+        </>}
+        <section className="project-context-summary"><span className="project-context-icon"><FolderGit2 size={15} /></span><div><span>Project context</span><strong>{project.root ? project.name : 'No project connected'}</strong><small>Resolved by specification preflight at run start.</small></div><button onClick={onOpenProjectConfig}><ChevronRight size={15} /></button></section>
       </div>
     </aside>
   }
@@ -154,6 +177,13 @@ export function Inspector({ node, project, sourceInstruction, catalysts, workflo
                 {toolOptions.filter((tool) => project.defaults.tools.includes(tool.id)).map((tool) => <button key={tool.id} className={effectiveTools.includes(tool.id) ? 'selected' : ''} aria-pressed={effectiveTools.includes(tool.id)} onClick={() => toggleTool(tool.id)}><Wrench size={12} /> {tool.label}</button>)}
               </div>}
             </>}
+          </section>}
+
+          {isLogic && <section className="form-section inspector-section-card logic-settings-card">
+            <div className="inspector-section-heading"><span><GitFork size={14} /></span><div><h3>Deterministic logic</h3><p>Configure values and routes; no model is invoked.</p></div></div>
+            <label><span>{node.data.templateId === 'switch-route' ? 'Cases' : node.data.templateId === 'merge-join' ? 'Join rule' : node.data.templateId.includes('test-result') ? 'Required checks' : node.data.templateId.includes('artifact') ? 'Required artifacts' : 'Expression or rule'}</span><textarea className="mono-input" rows={3} value={node.data.overrides['logic.rule'] ?? ''} onChange={(event) => updateOverride('logic.rule', event.target.value)} placeholder={node.data.templateId === 'switch-route' ? 'severity=critical → escalate\nseverity=warning → review\ndefault → continue' : node.data.templateId === 'merge-join' ? 'all required branches' : node.data.templateId.includes('test-result') ? 'typecheck, lint, test, build' : node.data.templateId.includes('artifact') ? 'patch, test_report' : 'verdict == pass'} /></label>
+            <div className="form-row"><label><span>Success route</span><input value={node.data.overrides['logic.success'] ?? 'pass'} onChange={(event) => updateOverride('logic.success', event.target.value)} /></label><label><span>Fallback route</span><input value={node.data.overrides['logic.fallback'] ?? 'fail'} onChange={(event) => updateOverride('logic.fallback', event.target.value)} /></label></div>
+            <label><span>Missing or invalid input</span><select value={node.data.overrides['logic.onUnknown'] ?? 'block'} onChange={(event) => updateOverride('logic.onUnknown', event.target.value)}><option value="block">Block and report</option><option value="fallback">Use fallback route</option><option value="human">Ask a human</option></select></label>
           </section>}
 
           {node.data.subworkflow && <section className="form-section inspector-section-card nested-workflow-settings">

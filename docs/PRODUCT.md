@@ -11,6 +11,7 @@ Relay treats agent work as a graph made from reusable, versioned instructions. T
 | Primitive | Purpose | Example |
 | --- | --- | --- |
 | Component | Reusable instruction and I/O contract | Code review |
+| Module | Reusable graph of components with public inputs/outputs | Implementation cycle |
 | Node | Configured component instance | Review only security-sensitive files |
 | Edge | Artifact flow plus optional condition | `verdict == revise` |
 | Router | Deterministic branch selection | Pass / revise / blocked |
@@ -18,7 +19,6 @@ Relay treats agent work as a graph made from reusable, versioned instructions. T
 | Project binding | Repository-specific variables and permissions | test command, design URL |
 | Artifact | Immutable output from a node attempt | patch, screenshot, verdict |
 | Run | Event log for one workflow execution | UI quality run #184 |
-| Blueprint | Reusable subgraph with exposed inputs/outputs | Review fan-out |
 | Catalyst | Authenticated workflow entrypoint | Signed pull-request hook or cron |
 | Nested workflow | Saved workflow invoked as one node | Feature delivery invokes release readiness |
 | Monitor board | User-arranged projection of real run streams | All runs touching a monorepo |
@@ -46,6 +46,12 @@ A node becomes ready when every required input is present and its inbound contro
 ### Decisions
 
 Routers consume structured output and select named edges. Conditions belong to edges as a small, deterministic expression—not natural-language interpretation. A router must define a fallback route.
+
+Relay ships deterministic condition, all-pass, any-pass, test-result, switch, merge/join, artifact-existence, and loop-limit gates as file-backed component assets. They never invoke a model to decide a boolean result.
+
+### Specification preflight
+
+Every triggered run begins with a visible Phase 0. The specifier inspects the objective, project profile, repository evidence, reusable workflow, and template adaptation rules, then writes an immutable `run-spec.json`. The artifact resolves acceptance criteria, affected scope, commands, optional modules, node bindings, assumptions, and the materialized execution order. It accompanies the workflow for that run; it never mutates the reusable template or widens permissions.
 
 ### Loops
 
@@ -90,7 +96,7 @@ Configuration is intentionally non-technical: users choose services, events, sch
 
 ### 4. Library
 
-Searchable components and blueprints from the repository, workspace, or an optional registry. Users can compare versions, inspect tests, and see where a component is used.
+Searchable components and Modules from the repository, workspace, or an optional registry. Built-ins are assets under `components/`, `modules/`, and `templates/`, rather than application constants. Users can compare versions, inspect tests, and see where each asset is used.
 
 User-created templates are private by default. Publishing creates a sanitized, versioned registry snapshot: repository paths, secrets, run history, and project-specific values are excluded. Published versions are immutable; edits produce a new version. Unpublishing removes future discovery without breaking workflows that already pin the published version. The current UI persists this visibility locally until the registry service exists.
 

@@ -44,10 +44,13 @@ export function WorkflowNode({ data, selected }: NodeProps<WorkflowNodeType>) {
       : data.status === 'failed'
         ? <X size={18} />
         : null
+  const kindLabel: Record<string, string> = {
+    agent: 'Agent', judge: 'Judge', tool: 'Tool', router: 'Logic', human: 'Approval', module: 'Module', workflow: 'Workflow', catalyst: 'Catalyst',
+  }
 
   return (
     <div
-      className={`workflow-node tone-${data.color} status-${data.status} ${selected ? 'is-selected' : ''}`}
+      className={`workflow-node kind-${data.kind} tone-${data.color} status-${data.status} ${selected ? 'is-selected' : ''}`}
       aria-label={`${data.label} workflow component`}
     >
       {data.kind !== 'catalyst' && <>
@@ -61,7 +64,7 @@ export function WorkflowNode({ data, selected }: NodeProps<WorkflowNodeType>) {
       </div>
       <p className="node-description">{data.result || data.description}</p>
       <div className="node-meta">
-        <span>{data.kind}</span>
+        <span className="node-kind-badge">{kindLabel[data.kind] ?? data.kind}</span>
         {data.tokens && <><i /> <span>{data.tokens}</span></>}
         {data.runtime && <><i /> <span>{data.runtime}</span></>}
       </div>

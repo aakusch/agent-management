@@ -1,0 +1,165 @@
+[
+  {
+    "id": "specification-preflight",
+    "name": "Specification preflight",
+    "description": "Materialize the objective, project evidence, and template rules into an immutable run specification.",
+    "version": "1.0.0", "icon": "scan", "color": "violet", "tags": ["preflight", "specification", "adaptation"],
+    "inputs": ["objective", "project_context", "workflow"], "outputs": ["run_spec", "acceptance_criteria", "resolved_bindings"],
+    "nodes": [{ "id": "specify", "componentId": "workflow-specifier", "position": { "x": 0, "y": 0 } }],
+    "edges": [], "entryNodeIds": ["specify"], "exitNodeIds": ["specify"]
+  },
+  {
+    "id": "repository-intake",
+    "name": "Repository intake",
+    "description": "Turn an objective and unfamiliar codebase into grounded project rules, acceptance criteria, and an affected-surface map.",
+    "version": "1.0.0", "icon": "scan", "color": "blue", "tags": ["discovery", "project", "scope"],
+    "inputs": ["objective", "project_context"], "outputs": ["task_spec", "project_rules", "impact_map"],
+    "nodes": [
+      { "id": "interpret", "componentId": "objective-interpreter", "position": { "x": 0, "y": 0 } },
+      { "id": "rules", "componentId": "project-rules", "position": { "x": 340, "y": 0 } },
+      { "id": "impact", "componentId": "change-surface", "position": { "x": 680, "y": 0 } }
+    ],
+    "edges": [{ "source": "interpret", "target": "rules", "handoff": true }, { "source": "rules", "target": "impact", "handoff": true }],
+    "entryNodeIds": ["interpret"], "exitNodeIds": ["impact"]
+  },
+  {
+    "id": "bug-investigation",
+    "name": "Bug investigation",
+    "description": "Reproduce a defect, isolate its cause, and define the smallest safe correction before implementation.",
+    "version": "1.0.0", "icon": "bug", "color": "rose", "tags": ["bug", "diagnosis", "reproduction"],
+    "inputs": ["bug_report", "project_rules"], "outputs": ["reproduction", "diagnosis", "fix_boundary"],
+    "nodes": [
+      { "id": "reproduce", "componentId": "bug-reproducer", "position": { "x": 0, "y": 0 } },
+      { "id": "diagnose", "componentId": "root-cause-analysis", "position": { "x": 340, "y": 0 } },
+      { "id": "impact", "componentId": "change-surface", "position": { "x": 680, "y": 0 } }
+    ],
+    "edges": [{ "source": "reproduce", "target": "diagnose", "handoff": true }, { "source": "diagnose", "target": "impact", "handoff": true }],
+    "entryNodeIds": ["reproduce"], "exitNodeIds": ["impact"]
+  },
+  {
+    "id": "implementation-cycle",
+    "name": "Implementation cycle",
+    "description": "Plan one bounded change, implement it, add proof, and repair targeted failures within a bounded loop.",
+    "version": "1.0.0", "icon": "wand", "color": "mint", "tags": ["implementation", "tests", "repair"],
+    "inputs": ["task_spec", "project_rules", "impact_map"], "outputs": ["patch", "test_patch", "verification"],
+    "nodes": [
+      { "id": "plan", "componentId": "change-planner", "position": { "x": 0, "y": 0 } },
+      { "id": "implement", "componentId": "scoped-implementer", "position": { "x": 340, "y": 0 } },
+      { "id": "tests", "componentId": "regression-test-author", "position": { "x": 680, "y": 0 } },
+      { "id": "verify", "componentId": "targeted-test-runner", "position": { "x": 1020, "y": 0 } },
+      { "id": "triage", "componentId": "failure-triage", "position": { "x": 1020, "y": 260 } },
+      { "id": "repair", "componentId": "finding-repair", "position": { "x": 680, "y": 260 } }
+    ],
+    "edges": [
+      { "source": "plan", "target": "implement", "handoff": true },
+      { "source": "implement", "target": "tests", "handoff": true },
+      { "source": "tests", "target": "verify", "handoff": true },
+      { "source": "verify", "target": "triage", "label": "failed", "tone": "danger", "condition": "verdict == fail", "handoff": true },
+      { "source": "triage", "target": "repair", "handoff": true },
+      { "source": "repair", "target": "verify", "label": "retry", "tone": "danger", "handoff": true, "loop": { "mode": "bounded", "maxIterations": 3, "maxDurationMinutes": 30, "stopOnNoProgress": 2, "onExhausted": "human" } }
+    ],
+    "entryNodeIds": ["plan"], "exitNodeIds": ["verify"]
+  },
+  {
+    "id": "verification-suite",
+    "name": "Verification suite",
+    "description": "Run typecheck, lint, tests, and build independently so each failure can be routed and repaired precisely.",
+    "version": "1.0.0", "icon": "terminal", "color": "amber", "tags": ["verification", "build", "test"],
+    "inputs": ["patch", "project_rules"], "outputs": ["typecheck_report", "lint_report", "test_report", "build_report"],
+    "nodes": [
+      { "id": "typecheck", "componentId": "typecheck-runner", "position": { "x": 0, "y": 0 } },
+      { "id": "lint", "componentId": "lint-runner", "position": { "x": 0, "y": 220 } },
+      { "id": "tests", "componentId": "test-runner", "position": { "x": 340, "y": 0 } },
+      { "id": "build", "componentId": "build-runner", "position": { "x": 340, "y": 220 } },
+      { "id": "gate", "componentId": "decision-gate", "position": { "x": 700, "y": 110 } }
+    ],
+    "edges": [
+      { "source": "typecheck", "target": "gate", "handoff": true }, { "source": "lint", "target": "gate", "handoff": true },
+      { "source": "tests", "target": "gate", "handoff": true }, { "source": "build", "target": "gate", "handoff": true }
+    ],
+    "entryNodeIds": ["typecheck", "lint", "tests", "build"], "exitNodeIds": ["gate"]
+  },
+  {
+    "id": "ui-quality-loop",
+    "name": "UI quality loop",
+    "description": "Exercise the interface, judge visual intent and accessibility, then repair findings within a bounded loop.",
+    "version": "1.0.0", "icon": "eye", "color": "violet", "tags": ["frontend", "browser", "accessibility"],
+    "inputs": ["preview_url", "task_spec", "patch"], "outputs": ["browser_report", "visual_findings", "accessibility_findings"],
+    "nodes": [
+      { "id": "browser", "componentId": "browser-qa", "position": { "x": 0, "y": 0 } },
+      { "id": "visual", "componentId": "visual-judge", "position": { "x": 340, "y": 0 } },
+      { "id": "accessibility", "componentId": "accessibility-review", "position": { "x": 340, "y": 230 } },
+      { "id": "gate", "componentId": "decision-gate", "position": { "x": 700, "y": 110 } },
+      { "id": "repair", "componentId": "finding-repair", "position": { "x": 700, "y": 350 } }
+    ],
+    "edges": [
+      { "source": "browser", "target": "visual", "handoff": true }, { "source": "browser", "target": "accessibility", "handoff": true },
+      { "source": "visual", "target": "gate", "handoff": true }, { "source": "accessibility", "target": "gate", "handoff": true },
+      { "source": "gate", "target": "repair", "label": "revise", "tone": "danger", "condition": "route == revise", "handoff": true },
+      { "source": "repair", "target": "browser", "label": "recheck", "tone": "danger", "handoff": true, "loop": { "mode": "bounded", "maxIterations": 3, "maxDurationMinutes": 30, "stopOnNoProgress": 2, "onExhausted": "human" } }
+    ],
+    "entryNodeIds": ["browser"], "exitNodeIds": ["gate"]
+  },
+  {
+    "id": "monorepo-integration",
+    "name": "Monorepo integration",
+    "description": "Trace affected packages, verify cross-package contracts, and test the integration boundary.",
+    "version": "1.0.0", "icon": "workflow", "color": "cyan", "tags": ["monorepo", "packages", "integration"],
+    "inputs": ["task_spec", "patch"], "outputs": ["package_impact", "integration_findings"],
+    "nodes": [
+      { "id": "packages", "componentId": "package-impact-analysis", "position": { "x": 0, "y": 0 } },
+      { "id": "integration", "componentId": "integration-review", "position": { "x": 340, "y": 0 } },
+      { "id": "tests", "componentId": "targeted-test-runner", "position": { "x": 680, "y": 0 } }
+    ],
+    "edges": [{ "source": "packages", "target": "integration", "handoff": true }, { "source": "integration", "target": "tests", "handoff": true }],
+    "entryNodeIds": ["packages"], "exitNodeIds": ["tests"]
+  },
+  {
+    "id": "database-change",
+    "name": "Database change",
+    "description": "Implement and review a schema or data change with compatibility and rollback evidence.",
+    "version": "1.0.0", "icon": "shield", "color": "coral", "tags": ["database", "migration", "safety"],
+    "inputs": ["task_spec", "schema"], "outputs": ["migration_patch", "migration_findings", "database_test_report"],
+    "nodes": [
+      { "id": "implement", "componentId": "schema-change-implementer", "position": { "x": 0, "y": 0 } },
+      { "id": "review", "componentId": "database-migration-review", "position": { "x": 340, "y": 0 } },
+      { "id": "tests", "componentId": "targeted-test-runner", "position": { "x": 680, "y": 0 } }
+    ],
+    "edges": [{ "source": "implement", "target": "review", "handoff": true }, { "source": "review", "target": "tests", "handoff": true }],
+    "entryNodeIds": ["implement"], "exitNodeIds": ["tests"]
+  },
+  {
+    "id": "release-preparation",
+    "name": "Release preparation",
+    "description": "Audit the final diff, synchronize documentation, and create an evidence-backed delivery handoff.",
+    "version": "1.0.0", "icon": "file-check", "color": "cyan", "tags": ["release", "audit", "handoff"],
+    "inputs": ["patch", "verification"], "outputs": ["diff_verdict", "documentation_patch", "handoff"],
+    "nodes": [
+      { "id": "audit", "componentId": "final-diff-audit", "position": { "x": 0, "y": 0 } },
+      { "id": "docs", "componentId": "docs-sync", "position": { "x": 340, "y": 0 } },
+      { "id": "handoff", "componentId": "summarize", "position": { "x": 680, "y": 0 } }
+    ],
+    "edges": [{ "source": "audit", "target": "docs", "handoff": true }, { "source": "docs", "target": "handoff", "handoff": true }],
+    "entryNodeIds": ["audit"], "exitNodeIds": ["handoff"]
+  },
+  {
+    "id": "quality-decision-tree",
+    "name": "Quality decision tree",
+    "description": "Combine check and review verdicts through deterministic pass, artifact, and final-route gates.",
+    "version": "1.0.0", "icon": "split", "color": "violet", "tags": ["logic", "decision-tree", "quality", "gates"],
+    "inputs": ["check_reports", "review_verdicts", "artifact_manifest"], "outputs": ["route", "failed_sources", "missing_artifacts"],
+    "nodes": [
+      { "id": "tests", "componentId": "test-result-gate", "position": { "x": 0, "y": 0 } },
+      { "id": "reviews", "componentId": "all-pass-gate", "position": { "x": 0, "y": 230 } },
+      { "id": "join", "componentId": "merge-join", "position": { "x": 360, "y": 115 } },
+      { "id": "artifacts", "componentId": "artifact-exists-gate", "position": { "x": 720, "y": 115 } },
+      { "id": "route", "componentId": "switch-route", "position": { "x": 1080, "y": 115 } }
+    ],
+    "edges": [
+      { "source": "tests", "target": "join" }, { "source": "reviews", "target": "join" },
+      { "source": "join", "target": "artifacts", "condition": "route == complete" },
+      { "source": "artifacts", "target": "route", "condition": "route == present" }
+    ],
+    "entryNodeIds": ["tests", "reviews"], "exitNodeIds": ["route"]
+  }
+]

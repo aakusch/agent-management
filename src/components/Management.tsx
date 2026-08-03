@@ -42,7 +42,7 @@ import {
   Wrench,
   X,
 } from 'lucide-react'
-import type { ComponentKind, ComponentTemplate, ProjectContext, ReasoningEffort, RelayTool } from '../types/workflow'
+import type { ComponentKind, ComponentTemplate, ProjectCapability, ProjectContext, ReasoningEffort, RelayTool, WorkflowModuleDefinition } from '../types/workflow'
 import type { CatalystDefinition, CatalystKind, PendingRun, RunMonitorBoard, WorkflowRecord, WorkflowTemplate } from '../types/catalog'
 import { RunBoard } from './RunBoard'
 import { StartRunModal, type RunConfiguration } from './StartRunModal'
@@ -56,6 +56,7 @@ interface ManagementProps {
   project: ProjectContext
   onUpdateProject: (project: ProjectContext) => void
   components: ComponentTemplate[]
+  modules: WorkflowModuleDefinition[]
   onCreateComponent: (component: ComponentTemplate) => void
   theme: 'dark' | 'light'
   onToggleTheme: () => void
@@ -111,6 +112,8 @@ const componentIconOptions = [
   { id: 'accessibility', label: 'Access', Icon: Accessibility },
   { id: 'bug', label: 'Debug', Icon: Bug },
   { id: 'file-check', label: 'Handoff', Icon: FileCheck2 },
+  { id: 'workflow', label: 'Flow', Icon: Workflow },
+  { id: 'layers', label: 'Module', Icon: Layers3 },
   { id: 'zap', label: 'Catalyst', Icon: Zap },
 ] as const
 
@@ -134,6 +137,7 @@ export function Management({
   project,
   onUpdateProject,
   components,
+  modules,
   onCreateComponent,
   theme,
   onToggleTheme,
@@ -210,9 +214,9 @@ export function Management({
         <section className="management-content">
           {page === 'dashboard' && <Dashboard onNavigate={onNavigate} project={project} components={components} workflows={workflows} />}
           {page === 'workflows' && <WorkflowsPage onNavigate={onNavigate} workflows={workflows} projectName={project.name} onStageWorkflow={onStageWorkflow} />}
-          {page === 'components' && <ComponentsPage components={components} onCreate={onCreateComponent} />}
+          {page === 'components' && <ComponentsPage components={components} modules={modules} onCreate={onCreateComponent} />}
           {page === 'projects' && <ProjectsPage project={project} onUpdate={onUpdateProject} />}
-          {page === 'templates' && <TemplatesPage templates={templates} onCreate={onCreateTemplate} onTogglePublished={onToggleTemplatePublished} onUseTemplate={onUseTemplate} />}
+          {page === 'templates' && <TemplatesPage templates={templates} modules={modules} onCreate={onCreateTemplate} onTogglePublished={onToggleTemplatePublished} onUseTemplate={onUseTemplate} />}
           {page === 'catalysts' && <CatalystsPage catalysts={catalysts} workflows={workflows} onCreate={onCreateCatalyst} onToggle={onToggleCatalyst} />}
           {page === 'runs' && <RunsPage onNavigate={onNavigate} stagedRuns={stagedRuns} onUpdateStagedRuns={onUpdateStagedRuns} workflows={workflows} board={monitorBoard} onUpdateBoard={onUpdateMonitorBoard} catalysts={catalysts} />}
         </section>
@@ -301,7 +305,7 @@ function WorkflowsPage({ onNavigate, workflows, projectName, onStageWorkflow }: 
   </>
 }
 
-function ComponentsPage({ components, onCreate }: { components: ComponentTemplate[]; onCreate: (component: ComponentTemplate) => void }) {
+function ComponentsPage({ components, modules, onCreate }: { components: ComponentTemplate[]; modules: WorkflowModuleDefinition[]; onCreate: (component: ComponentTemplate) => void }) {
   const [selectedId, setSelectedId] = useState(components[0]?.id ?? '')
   const [creating, setCreating] = useState(false)
   const [query, setQuery] = useState('')
@@ -318,7 +322,11 @@ function ComponentsPage({ components, onCreate }: { components: ComponentTemplat
     setDraft({ name: '', description: '', kind: 'agent', icon: 'wand', color: 'mint', instruction: '', inputs: '', outputs: '' })
   }
 
-  return <div className="page-wrap"><PageHeading eyebrow="Instruction library" title="Components" description="Configure reusable agent roles in plain language. Advanced contracts stay available when you need them." action={<button className="primary-cta" onClick={() => setCreating(true)}><Plus size={16} /> New component</button>} />
+  return <div className="page-wrap"><PageHeading eyebrow="Instruction library" title="Components & modules" description="Atomic components do one job. Modules preserve a reusable graph of components, routes, loops, and handoffs." action={<button className="primary-cta" onClick={() => setCreating(true)}><Plus size={16} /> New component</button>} />
+    <section className="module-catalog-section">
+      <div className="surface-heading"><div><span className="eyebrow">Reusable compositions</span><h2>Modules</h2><p>Drop one linked module into a workflow, or expand it into editable components in the builder.</p></div><span className="module-count">{modules.length} available</span></div>
+      <div className="module-catalog-grid">{modules.map((module) => <article className="surface module-catalog-card" key={module.id}><span className={`module-card-icon tone-${module.color}`}><Layers3 size={17} /></span><div><div className="module-card-heading"><strong>{module.name}</strong><span>{module.source === 'built-in' ? 'Relay' : 'Yours'}</span></div><p>{module.description}</p><div className="module-card-contract"><span>{module.nodes.length} components</span><i /><span>{module.inputs.length} inputs</span><i /><span>{module.outputs.length} outputs</span></div></div></article>)}</div>
+    </section>
     <div className="component-manager surface">
       <div className="component-list-pane"><label className="wide-search"><Search size={14} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search components" /></label>{visibleComponents.map((component) => <button key={component.id} className={selected?.id === component.id ? 'active' : ''} onClick={() => { setSelectedId(component.id); setCreating(false) }}><span className={`component-kind-dot tone-${component.color}`}><ComponentIcon icon={component.icon} /></span><div><strong>{component.name}</strong><small>{component.kind} · v{component.version}</small></div><ChevronRight size={14} /></button>)}</div>
       <div className="component-editor-pane">
@@ -372,6 +380,16 @@ function ComponentsPage({ components, onCreate }: { components: ComponentTemplat
 function ProjectsPage({ project, onUpdate }: { project: ProjectContext; onUpdate: (project: ProjectContext) => void }) {
   const variables = Object.entries(project.variables)
   const connected = Boolean(project.root)
+  const profile = project.profile ?? { status: 'not-scanned' as const, structure: 'unknown' as const, packageManager: 'auto' as const, capabilities: [], instructions: ['AGENTS.md', 'CLAUDE.md'], commands: {} }
+  const updateProfile = (patch: Partial<NonNullable<ProjectContext['profile']>>) => onUpdate({ ...project, profile: { ...profile, ...patch } })
+  const capabilityOptions: { id: ProjectCapability; label: string; detail: string }[] = [
+    { id: 'web', label: 'Web interface', detail: 'Browser, visual, and accessibility checks.' },
+    { id: 'service', label: 'API or service', detail: 'Contract and integration boundaries.' },
+    { id: 'database', label: 'Database', detail: 'Schema and migration safety.' },
+    { id: 'containers', label: 'Containers', detail: 'Docker-backed local services.' },
+    { id: 'documentation', label: 'Documentation', detail: 'Docs and knowledge synchronization.' },
+    { id: 'benchmarks', label: 'Benchmarks', detail: 'Measured regression comparison.' },
+  ]
   const updateDefaults = (patch: Partial<ProjectContext['defaults']>) => onUpdate({ ...project, defaults: { ...project.defaults, ...patch } })
   const updatePermissions = (patch: Partial<ProjectContext['permissions']>) => onUpdate({ ...project, permissions: { ...project.permissions, ...patch } })
   const updateVariable = (oldKey: string, key: string, value: string) => {
@@ -429,6 +447,17 @@ function ProjectsPage({ project, onUpdate }: { project: ProjectContext; onUpdate
       </section>
     </div>
 
+    <section className="surface project-profile-card">
+      <div className="surface-heading"><div><span className="eyebrow">Specification context</span><h2>Project profile</h2><p>The run preflight verifies this profile against the repository and uses it to resolve optional modules and project commands.</p></div><button className="secondary-cta" disabled={!connected} onClick={() => updateProfile({ status: 'scan-requested', scannedAt: undefined })}><ScanSearch size={14} /> Refresh with runner</button></div>
+      <div className="profile-status-line"><span className={`configuration-status ${profile.status === 'ready' ? 'connected' : ''}`}><CircleDot size={12} /> {profile.status.replaceAll('-', ' ')}</span><p>{profile.status === 'scan-requested' ? 'The next connected run will perform a repository sweep before materializing its run specification.' : 'You can set known facts now; the runner treats them as hints until verified.'}</p></div>
+      <div className="profile-fields">
+        <label><span>Repository shape</span><select value={profile.structure} onChange={(event) => updateProfile({ structure: event.target.value as typeof profile.structure, status: 'configured' })}><option value="unknown">Detect during preflight</option><option value="single-package">Single package</option><option value="monorepo">Monorepo</option><option value="multi-repository">Multiple repositories</option></select></label>
+        <label><span>Package manager</span><select value={profile.packageManager} onChange={(event) => updateProfile({ packageManager: event.target.value as typeof profile.packageManager, status: 'configured' })}><option value="auto">Detect during preflight</option><option value="pnpm">pnpm</option><option value="npm">npm</option><option value="yarn">Yarn</option><option value="bun">Bun</option><option value="python">Python</option><option value="mixed">Mixed toolchain</option></select></label>
+      </div>
+      <div className="capability-heading"><strong>Known capabilities</strong><span>Optional—preflight will verify these</span></div>
+      <div className="capability-grid">{capabilityOptions.map((capability) => { const selected = profile.capabilities.includes(capability.id); return <button key={capability.id} className={selected ? 'selected' : ''} aria-pressed={selected} onClick={() => updateProfile({ status: 'configured', capabilities: selected ? profile.capabilities.filter((item) => item !== capability.id) : [...profile.capabilities, capability.id] })}><span>{selected ? <CheckCircle2 size={14} /> : <Plus size={14} />}</span><div><strong>{capability.label}</strong><small>{capability.detail}</small></div></button> })}</div>
+    </section>
+
     <div className="configure-grid secondary-configure-grid">
       <section className="surface configure-card tool-defaults-card">
         <div className="configure-card-heading"><span><Wrench size={17} /></span><div><span className="eyebrow">Project allowlist</span><h2>Tools</h2><p>Components inherit these and may narrow them for one node.</p></div></div>
@@ -456,22 +485,24 @@ function ProjectsPage({ project, onUpdate }: { project: ProjectContext; onUpdate
   </div>
 }
 
-function TemplatesPage({ templates, onCreate, onTogglePublished, onUseTemplate }: { templates: WorkflowTemplate[]; onCreate: (template: WorkflowTemplate) => void; onTogglePublished: (id: string) => void; onUseTemplate: (template: WorkflowTemplate) => void }) {
+function TemplatesPage({ templates, modules, onCreate, onTogglePublished, onUseTemplate }: { templates: WorkflowTemplate[]; modules: WorkflowModuleDefinition[]; onCreate: (template: WorkflowTemplate) => void; onTogglePublished: (id: string) => void; onUseTemplate: (template: WorkflowTemplate) => void }) {
   const [creating, setCreating] = useState(false)
   const [query, setQuery] = useState('')
-  const [draft, setDraft] = useState({ name: '', description: '', level: 'Guided' as WorkflowTemplate['level'], steps: '', published: false })
+  const [draft, setDraft] = useState({ name: '', description: '', level: 'Guided' as WorkflowTemplate['level'], moduleIds: [] as string[], published: false })
   const visible = templates.filter((template) => `${template.name} ${template.description} ${template.steps.join(' ')}`.toLowerCase().includes(query.toLowerCase()))
   const create = () => {
-    if (!draft.name.trim() || !draft.description.trim()) return
+    if (!draft.name.trim() || !draft.description.trim() || !draft.moduleIds.length) return
     const id = draft.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
-    onCreate({ id, name: draft.name.trim(), description: draft.description.trim(), level: draft.level, steps: draft.steps.split(',').map((step) => step.trim()).filter(Boolean), componentIds: ['implement-ui', 'code-review', 'visual-judge', 'decision-gate', 'summarize'], source: 'user', published: draft.published, createdAt: new Date().toISOString() })
+    const selectedModules = draft.moduleIds.map((moduleId) => modules.find((module) => module.id === moduleId)).filter((module): module is WorkflowModuleDefinition => Boolean(module))
+    onCreate({ id, name: draft.name.trim(), description: draft.description.trim(), level: draft.level, steps: selectedModules.map((module) => module.name), componentIds: [], moduleIds: selectedModules.map((module) => module.id), adaptationRules: [], source: 'user', published: draft.published, createdAt: new Date().toISOString() })
     setCreating(false)
-    setDraft({ name: '', description: '', level: 'Guided', steps: '', published: false })
+    setDraft({ name: '', description: '', level: 'Guided', moduleIds: [], published: false })
   }
-  return <div className="page-wrap"><PageHeading eyebrow="Starting points" title="Templates" description="Reusable workflow structures from Relay, your workspace, and eventually the shared community registry." action={<button className="primary-cta" onClick={() => setCreating(true)}><Plus size={15} /> New template</button>} />
-    {creating && <section className="surface template-create"><div className="editor-title"><div><span className="eyebrow">Save reusable workflow</span><h2>Create template</h2></div><button className="icon-button" onClick={() => setCreating(false)}><X size={16} /></button></div><div className="editor-form two-column"><label><span>Name</span><input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="My release workflow" /></label><label><span>Complexity</span><select value={draft.level} onChange={(event) => setDraft({ ...draft, level: event.target.value as WorkflowTemplate['level'] })}><option>Guided</option><option>Advanced</option></select></label></div><div className="editor-form"><label><span>Description</span><input value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.target.value })} placeholder="Explain when another user should choose this template." /></label><label><span>Step labels, comma separated</span><input value={draft.steps} onChange={(event) => setDraft({ ...draft, steps: event.target.value })} placeholder="Plan, Implement, Review, Handoff" /></label><label className="publish-setting"><input type="checkbox" checked={draft.published} onChange={(event) => setDraft({ ...draft, published: event.target.checked })} /><span><strong>Publish to community</strong><small>Make this template discoverable after registry review. Keep off for workspace-only use.</small></span></label></div><div className="editor-actions"><button className="secondary-cta" onClick={() => setCreating(false)}>Cancel</button><button className="primary-cta" onClick={create}>Create template</button></div></section>}
+  return <div className="page-wrap"><PageHeading eyebrow="Starting points" title="Templates" description="Stable workflow blueprints assembled from reusable modules. Each run gets a project- and objective-specific specification before execution." action={<button className="primary-cta" onClick={() => setCreating(true)}><Plus size={15} /> New template</button>} />
+    <section className="template-preflight-note"><Sparkles size={16} /><div><strong>Templates stay reusable; runs become specific.</strong><span>The specification preflight selects optional modules, resolves project commands, and records every adaptation in <code>run-spec.json</code>.</span></div></section>
+    {creating && <section className="surface template-create"><div className="editor-title"><div><span className="eyebrow">Save reusable workflow</span><h2>Create template</h2></div><button className="icon-button" onClick={() => setCreating(false)}><X size={16} /></button></div><div className="editor-form two-column"><label><span>Name</span><input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="My release workflow" /></label><label><span>Complexity</span><select value={draft.level} onChange={(event) => setDraft({ ...draft, level: event.target.value as WorkflowTemplate['level'] })}><option>Guided</option><option>Advanced</option></select></label></div><div className="editor-form"><label><span>Description</span><input value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.target.value })} placeholder="Explain when another user should choose this template." /></label><div className="template-module-field"><span>Modules in order</span><p>Choose reusable compositions. Click in execution order.</p><div className="template-module-picker">{modules.map((module) => { const index = draft.moduleIds.indexOf(module.id); return <button key={module.id} className={index >= 0 ? 'selected' : ''} onClick={() => setDraft({ ...draft, moduleIds: index >= 0 ? draft.moduleIds.filter((id) => id !== module.id) : [...draft.moduleIds, module.id] })}>{index >= 0 && <em>{index + 1}</em>}<Layers3 size={13} /><span>{module.name}</span></button> })}</div></div><label className="publish-setting"><input type="checkbox" checked={draft.published} onChange={(event) => setDraft({ ...draft, published: event.target.checked })} /><span><strong>Publish to community</strong><small>Make this template discoverable after registry review. Keep off for workspace-only use.</small></span></label></div><div className="editor-actions"><button className="secondary-cta" onClick={() => setCreating(false)}>Cancel</button><button className="primary-cta" onClick={create} disabled={!draft.name.trim() || !draft.description.trim() || !draft.moduleIds.length}>Create template</button></div></section>}
     <div className="template-toolbar"><label className="wide-search"><Search size={14} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search templates" /></label><span>{templates.filter((template) => template.source === 'user').length} created by you</span></div>
-    <div className="template-grid">{visible.map((template) => <article className="surface template-card" key={template.id}><div className="template-visual"><Workflow size={24} /><span>{template.steps.length} steps</span></div><div className="template-badges"><span className={`level-pill ${template.level.toLowerCase()}`}>{template.level}</span><span className={`visibility-pill ${template.published ? 'published' : 'private'}`}>{template.source === 'built-in' ? 'Relay' : template.published ? 'Published' : 'Private'}</span></div><h2>{template.name}</h2><p>{template.description}</p><div className="template-steps">{template.steps.map((step) => <span key={step}>{step}</span>)}</div><div className="template-actions"><button className="secondary-cta" onClick={() => onUseTemplate(template)}>Use template <ArrowRight size={13} /></button>{template.source === 'user' && <button className={`publish-toggle ${template.published ? 'on' : ''}`} onClick={() => onTogglePublished(template.id)} aria-label={`${template.published ? 'Unpublish' : 'Publish'} ${template.name}`}><i /><span>{template.published ? 'Published' : 'Private'}</span></button>}</div></article>)}</div>
+    <div className="template-grid">{visible.map((template) => <article className="surface template-card" key={template.id}><div className="template-visual"><Workflow size={24} /><span>{template.moduleIds?.length ?? template.steps.length} modules</span></div><div className="template-badges"><span className={`level-pill ${template.level.toLowerCase()}`}>{template.level}</span><span className={`visibility-pill ${template.published ? 'published' : 'private'}`}>{template.source === 'built-in' ? 'Relay' : template.published ? 'Published' : 'Private'}</span></div><h2>{template.name}</h2><p>{template.description}</p><div className="template-steps">{template.steps.map((step) => <span key={step}>{step}</span>)}</div>{Boolean(template.adaptationRules?.length) && <div className="template-adaptation"><Sparkles size={13} /><span>{template.adaptationRules!.length} optional module {template.adaptationRules!.length === 1 ? 'rule' : 'rules'} resolved during preflight</span></div>}<div className="template-actions"><button className="secondary-cta" onClick={() => onUseTemplate(template)}>Use template <ArrowRight size={13} /></button>{template.source === 'user' && <button className={`publish-toggle ${template.published ? 'on' : ''}`} onClick={() => onTogglePublished(template.id)} aria-label={`${template.published ? 'Unpublish' : 'Publish'} ${template.name}`}><i /><span>{template.published ? 'Published' : 'Private'}</span></button>}</div></article>)}</div>
   </div>
 }
 

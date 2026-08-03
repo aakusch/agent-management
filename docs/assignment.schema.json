@@ -43,9 +43,34 @@
         "additionalProperties": false
       }
     },
+    "modules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "description", "version", "inputs", "outputs", "nodes", "edges", "entryNodeIds", "exitNodeIds"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "name": { "type": "string" },
+          "description": { "type": "string" },
+          "version": { "type": "string" },
+          "icon": { "type": "string" },
+          "color": { "type": "string" },
+          "tags": { "type": "array", "items": { "type": "string" } },
+          "inputs": { "type": "array", "items": { "type": "string" } },
+          "outputs": { "type": "array", "items": { "type": "string" } },
+          "source": { "enum": ["built-in", "user"] },
+          "nodes": { "type": "array", "items": { "type": "object" } },
+          "edges": { "type": "array", "items": { "type": "object" } },
+          "entryNodeIds": { "type": "array", "items": { "type": "string" } },
+          "exitNodeIds": { "type": "array", "items": { "type": "string" } },
+          "createdAt": { "type": "string", "format": "date-time" }
+        },
+        "additionalProperties": false
+      }
+    },
     "driver": {
       "type": "object",
-      "required": ["protocol", "role", "concurrency", "stateDirectory", "eventLog", "artifactDirectory", "checkpointAfterEachNode", "defaultModel", "defaultEffort", "tools", "stopConditions", "permissions"],
+      "required": ["protocol", "role", "concurrency", "stateDirectory", "eventLog", "artifactDirectory", "checkpointAfterEachNode", "specification", "defaultModel", "defaultEffort", "tools", "stopConditions", "permissions"],
       "properties": {
         "protocol": { "const": "relay-driver-v1" },
         "role": { "type": "string" },
@@ -54,6 +79,22 @@
         "eventLog": { "type": "string" },
         "artifactDirectory": { "type": "string" },
         "checkpointAfterEachNode": { "type": "boolean" },
+        "specification": {
+          "type": "object",
+          "required": ["enabled", "componentId", "mode", "artifact", "maySelectOptionalModules", "mayBindProjectCommands", "mayConfigureNodes", "mayRemoveRequiredModules", "mayWidenPermissions"],
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "componentId": { "const": "workflow-specifier" },
+            "mode": { "enum": ["guided", "exact"] },
+            "artifact": { "const": "run-spec.json" },
+            "maySelectOptionalModules": { "type": "boolean" },
+            "mayBindProjectCommands": { "type": "boolean" },
+            "mayConfigureNodes": { "type": "boolean" },
+            "mayRemoveRequiredModules": { "const": false },
+            "mayWidenPermissions": { "const": false }
+          },
+          "additionalProperties": false
+        },
         "defaultModel": { "type": "string", "minLength": 1 },
         "defaultEffort": { "enum": ["low", "medium", "high", "xhigh"] },
         "tools": { "type": "array", "items": { "enum": ["filesystem", "terminal", "git", "browser", "web"] }, "uniqueItems": true },

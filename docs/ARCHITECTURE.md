@@ -5,7 +5,7 @@
 Relay has three separable layers:
 
 ```text
-Markdown components + workflow JSON
+Markdown components + module/template JSON + workflow JSON
                 ↓ compile
       execution plan + policy
                 ↓ run
@@ -45,6 +45,14 @@ Project bindings also declare the default model identifier, reasoning effort, ma
 
 Edges are first-class transitions. Their routing trigger, condition, priority, delay, blocked behavior, payload selection, and loop policy belong to the workflow connection—not to either reusable component. This lets the same review component receive full artifacts in one workflow, a summary in another, and wait for human approval in a third without forking its Markdown source.
 
+An edge may also request an agent-authored handoff. Payload forwarding is mechanical; a handoff asks the source agent to explain decisions, artifacts, verification, risks, open questions, and the recommended next action specifically for the target. The driver validates required handoffs before scheduling the target.
+
+### Modules and templates
+
+Modules are JSON assets containing a reusable internal graph, explicit entry and exit nodes, and a public input/output contract. Workflows reference a linked module as one node. A user may expand it into a detached editable copy without changing the source module. Templates are also JSON assets and assemble stable modules plus optional adaptation rules.
+
+Every run begins with Specification preflight. It emits `run-spec.json`, an immutable accompaniment that resolves the objective and project evidence into a materialized execution plan. The source template and workflow remain unchanged.
+
 The transition boundary is intentional:
 
 - Components declare capabilities, instructions, and input/output contracts.
@@ -78,13 +86,14 @@ Saved workflows may appear in the component library as `kind: workflow`. A node 
 
 ### Compiler
 
-1. Load and validate component frontmatter.
-2. Validate node and edge references.
-3. Detect cycles; reject any cycle without explicit loop policy.
-4. Resolve component versions.
-5. Merge project context and overrides.
-6. Validate variable completeness and input/output compatibility.
-7. Emit an immutable execution plan.
+1. Load and validate component, module, and template assets.
+2. Run Specification preflight and persist `run-spec.json`.
+3. Validate node and edge references.
+4. Detect cycles; reject any cycle without explicit loop policy.
+5. Resolve component and module versions.
+6. Merge project context and overrides.
+7. Validate variable completeness and input/output compatibility.
+8. Emit an immutable execution plan.
 
 ### Scheduler
 

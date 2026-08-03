@@ -1,4 +1,5 @@
 import type { RunConfiguration } from '../components/StartRunModal'
+import type { ProjectCapability, WorkflowAdaptation } from './workflow'
 
 export interface RunGraphSnapshot {
   nodes: Array<{ id: string; label: string; kind: string; x: number; y: number }>
@@ -16,6 +17,15 @@ export interface WorkflowRecord {
   source: 'starter' | 'local' | 'imported'
   entryMode?: 'manual' | 'catalyst'
   steps?: string[]
+  adaptation?: WorkflowAdaptation
+}
+
+export interface TemplateAdaptationRule {
+  capability?: ProjectCapability
+  structure?: 'monorepo' | 'multi-repository'
+  moduleId: string
+  action: 'include' | 'optional'
+  reason: string
 }
 
 export interface WorkflowTemplate {
@@ -25,6 +35,8 @@ export interface WorkflowTemplate {
   level: 'Guided' | 'Advanced'
   steps: string[]
   componentIds: string[]
+  moduleIds?: string[]
+  adaptationRules?: TemplateAdaptationRule[]
   source: 'built-in' | 'user' | 'community'
   author?: string
   published: boolean
@@ -41,6 +53,12 @@ export interface PendingRun {
   state: 'staged' | 'waiting-for-runner'
   preparedBy?: 'user' | 'agent' | 'catalyst'
   graph?: RunGraphSnapshot
+  specification?: {
+    phase: 0
+    status: 'pending'
+    componentId: 'workflow-specifier'
+    artifact: string
+  }
 }
 
 export type RunMonitorStatus = 'not-started' | 'waiting-runner' | 'running' | 'blocked' | 'completed'
