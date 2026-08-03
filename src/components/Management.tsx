@@ -61,7 +61,8 @@ interface ManagementProps {
   onCreateTemplate: (template: WorkflowTemplate) => void
   onToggleTemplatePublished: (id: string) => void
   onUseTemplate: (template: WorkflowTemplate) => void
-  pendingRun: PendingRun | null
+  stagedRuns: PendingRun[]
+  onUpdateStagedRuns: (runs: PendingRun[]) => void
   monitorBoard: RunMonitorBoard
   onUpdateMonitorBoard: (board: RunMonitorBoard) => void
   catalysts: CatalystDefinition[]
@@ -137,7 +138,8 @@ export function Management({
   onCreateTemplate,
   onToggleTemplatePublished,
   onUseTemplate,
-  pendingRun,
+  stagedRuns,
+  onUpdateStagedRuns,
   monitorBoard,
   onUpdateMonitorBoard,
   catalysts,
@@ -186,7 +188,7 @@ export function Management({
           {page === 'projects' && <ProjectsPage project={project} onUpdate={onUpdateProject} />}
           {page === 'templates' && <TemplatesPage templates={templates} onCreate={onCreateTemplate} onTogglePublished={onToggleTemplatePublished} onUseTemplate={onUseTemplate} />}
           {page === 'catalysts' && <CatalystsPage catalysts={catalysts} workflows={workflows} onCreate={onCreateCatalyst} onToggle={onToggleCatalyst} />}
-          {page === 'runs' && <RunsPage onNavigate={onNavigate} pendingRun={pendingRun} workflows={workflows} board={monitorBoard} onUpdateBoard={onUpdateMonitorBoard} />}
+          {page === 'runs' && <RunsPage onNavigate={onNavigate} stagedRuns={stagedRuns} onUpdateStagedRuns={onUpdateStagedRuns} workflows={workflows} board={monitorBoard} onUpdateBoard={onUpdateMonitorBoard} />}
         </section>
       </div>
     </main>
@@ -521,6 +523,6 @@ function CatalystsPage({ catalysts, workflows, onCreate, onToggle }: { catalysts
   </div>
 }
 
-function RunsPage({ onNavigate, pendingRun, workflows, board, onUpdateBoard }: { onNavigate: (page: AppPage) => void; pendingRun: PendingRun | null; workflows: WorkflowRecord[]; board: RunMonitorBoard; onUpdateBoard: (board: RunMonitorBoard) => void }) {
-  return <div className="run-board-page"><RunBoard board={board} workflows={workflows} pendingRun={pendingRun} onChange={onUpdateBoard} onOpenBuilder={() => onNavigate('builder')} /></div>
+function RunsPage({ onNavigate, stagedRuns, onUpdateStagedRuns, workflows, board, onUpdateBoard }: { onNavigate: (page: AppPage) => void; stagedRuns: PendingRun[]; onUpdateStagedRuns: (runs: PendingRun[]) => void; workflows: WorkflowRecord[]; board: RunMonitorBoard; onUpdateBoard: (board: RunMonitorBoard) => void }) {
+  return <div className="run-board-page"><RunBoard board={board} workflows={workflows} stagedRuns={stagedRuns} onUpdateStagedRuns={onUpdateStagedRuns} onChange={onUpdateBoard} onOpenBuilder={() => onNavigate('builder')} /></div>
 }

@@ -1,5 +1,10 @@
 import type { RunConfiguration } from '../components/StartRunModal'
 
+export interface RunGraphSnapshot {
+  nodes: Array<{ id: string; label: string; kind: string; x: number; y: number }>
+  edges: Array<{ id: string; source: string; target: string; label?: string; tone?: string }>
+}
+
 export interface WorkflowRecord {
   id: string
   name: string
@@ -28,11 +33,14 @@ export interface WorkflowTemplate {
 
 export interface PendingRun {
   id: string
+  workflowId?: string
   workflowName: string
   projectName?: string
   configuration: RunConfiguration
   createdAt: string
-  state: 'waiting-for-runner'
+  state: 'staged' | 'waiting-for-runner'
+  preparedBy?: 'user' | 'agent' | 'catalyst'
+  graph?: RunGraphSnapshot
 }
 
 export type RunMonitorStatus = 'not-started' | 'waiting-runner' | 'running' | 'blocked' | 'completed'
@@ -55,6 +63,29 @@ export interface RunMonitorTile {
   catalyst?: string
   parentWorkflow?: string
   createdAt: string
+  updatedAt?: string
+  observerUrl?: string
+  graph?: RunGraphSnapshot
+}
+
+export interface RelayRunEvent {
+  protocol: 'relay-events-v1'
+  seq: number
+  time: string
+  runId: string
+  type: string
+  nodeId?: string
+  attempt?: number
+  agentId?: string
+  payload?: {
+    status?: string
+    summary?: string
+    tool?: string
+    command?: string
+    route?: string
+    artifactIds?: string[]
+    [key: string]: unknown
+  }
 }
 
 export interface RunMonitorBoard {

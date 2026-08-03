@@ -1,45 +1,115 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  AlertTriangle,
+  Activity,
+  ArrowLeft,
   ArrowRight,
-  Columns2,
-  GripVertical,
-  LayoutGrid,
-  Layers3,
-  Link2,
-  Plus,
+  Bot,
+  Check,
+  ChevronRight,
+  CircleStop,
+  Code2,
+  Copy,
+  FileJson2,
+  FolderGit2,
+  Pause,
+  Play,
   Radio,
-  Rows3,
+  Search,
   TerminalSquare,
   Trash2,
   Workflow,
+  X,
 } from 'lucide-react'
-import type { PendingRun, RunMonitorBoard, RunMonitorStatus, RunMonitorTile, WorkflowRecord } from '../types/catalog'
+import type { PendingRun, RelayRunEvent, RunMonitorBoard, RunMonitorStatus, RunMonitorTile, WorkflowRecord } from '../types/catalog'
 
 interface RunBoardProps {
   board: RunMonitorBoard
   workflows: WorkflowRecord[]
-  pendingRun: PendingRun | null
+  stagedRuns: PendingRun[]
+  onUpdateStagedRuns: (runs: PendingRun[]) => void
   onChange: (board: RunMonitorBoard) => void
   onOpenBuilder: () => void
 }
 
 const statusCopy: Record<RunMonitorStatus, { label: string; detail: string }> = {
-  'not-started': { label: 'Not started', detail: 'Open the builder when you are ready to prepare this run.' },
-  'waiting-runner': { label: 'Waiting for runner', detail: 'Prepared on the web. Connect the CLI to begin execution.' },
-  running: { label: 'Running', detail: 'Live events are streaming from the connected runner.' },
-  blocked: { label: 'Needs attention', detail: 'The driver is waiting for a decision or conflict resolution.' },
-  completed: { label: 'Completed', detail: 'All required workflow routes finished.' },
+  'not-started': { label: 'Not started', detail: 'This monitor is not attached to an execution.' },
+  'waiting-runner': { label: 'Waiting for runner', detail: 'Attach the local Relay runner to begin streaming.' },
+  running: { label: 'Running', detail: 'Events are streaming from the connected runner.' },
+  blocked: { label: 'Needs attention', detail: 'The driver is waiting for a decision.' },
+  completed: { label: 'Completed', detail: 'The workflow reached a terminal state.' },
 }
 
-function MiniRunGraph({ tile }: { tile: RunMonitorTile }) {
+const eventTypes = [
+  'run.created', 'run.started', 'run.paused', 'run.resumed', 'run.completed', 'run.failed', 'run.cancelled',
+  'node.ready', 'node.started', 'node.output', 'node.completed', 'node.failed',
+  'agent.spawned', 'agent.heartbeat', 'agent.tool.started', 'agent.tool.completed', 'agent.stopped',
+  'route.selected', 'loop.iterated', 'loop.exhausted', 'artifact.created', 'approval.requested',
+  'approval.resolved', 'budget.warning', 'policy.denied',
+]
+
+function slug(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, '-')
+}
+
+function formatTime(value: string) {
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+}
+
+function WorkflowRunGraph({ tile, events = [], expanded = false }: { tile: RunMonitorTile; events?: RelayRunEvent[]; expanded?: boolean }) {
   const fallback = ['Prepare', 'Implement', 'Review', 'Verify', 'Handoff']
   const supplied = tile.steps.every((step) => /^Step \d+$/.test(step)) ? [] : tile.steps
   const steps = supplied.length >= 5 ? supplied : [...supplied, ...fallback].slice(0, 5)
-  const nodeClass = tile.status === 'running' ? 'active' : tile.status === 'blocked' ? 'attention' : tile.status === 'completed' ? 'complete' : ''
+  const activeNodeId = [...events].reverse().find((event) => event.nodeId && ['node.started', 'node.output', 'agent.spawned', 'agent.tool.started'].includes(event.type))?.nodeId
+  const completedIds = new Set(events.filter((event) => event.type === 'node.completed' && event.nodeId).map((event) => event.nodeId))
+  const stateFor = (label: string, index: number) => {
+    const labelSlug = slug(label)
+    const matches = (id?: string) => Boolean(id && (slug(id) === labelSlug || slug(id).includes(labelSlug.split('-')[0])))
+    if (tile.status === 'completed' || [...completedIds].some(matches)) return 'complete'
+    if (matches(activeNodeId) || (tile.status === 'running' && index === 0 && !activeNodeId)) return 'active'
+    if (tile.status === 'blocked' && index === 0) return 'attention'
+    return ''
+  }
+
+  if (tile.graph?.nodes.length) {
+    const xs = tile.graph.nodes.map((node) => node.x)
+    const ys = tile.graph.nodes.map((node) => node.y)
+    const minX = Math.min(...xs)
+    const maxX = Math.max(...xs)
+    const minY = Math.min(...ys)
+    const maxY = Math.max(...ys)
+    const point = (node: (typeof tile.graph.nodes)[number]) => ({
+      x: 4 + ((node.x - minX) / Math.max(maxX - minX, 1)) * 77,
+      y: 10 + ((node.y - minY) / Math.max(maxY - minY, 1)) * 66,
+    })
+    const nodeById = new Map(tile.graph.nodes.map((node) => [node.id, node]))
+    const stateForNode = (id: string) => {
+      if (tile.status === 'completed' || completedIds.has(id)) return 'complete'
+      if (activeNodeId === id || slug(activeNodeId ?? '') === slug(id)) return 'active'
+      if (tile.status === 'blocked' && activeNodeId === id) return 'attention'
+      return ''
+    }
+    return <div className={`mini-run-graph snapshot ${expanded ? 'expanded' : ''} status-${tile.status}`}>
+      <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+        {tile.graph.edges.map((item) => {
+          const source = nodeById.get(item.source)
+          const target = nodeById.get(item.target)
+          if (!source || !target) return null
+          const from = point(source)
+          const to = point(target)
+          const backwards = to.x <= from.x
+          return <path key={item.id} className={backwards || item.tone === 'danger' ? 'return-path' : ''} d={`M ${from.x + 15} ${from.y + 7} C ${backwards ? from.x + 20 : (from.x + to.x) / 2} ${from.y + 7}, ${backwards ? to.x - 5 : (from.x + to.x) / 2} ${to.y + 7}, ${to.x} ${to.y + 7}`} />
+        })}
+      </svg>
+      {tile.graph.nodes.map((node) => {
+        const position = point(node)
+        return <div className={`monitor-node snapshot-node ${stateForNode(node.id)}`} style={{ left: `${position.x}%`, top: `${position.y}%` }} key={node.id}><i /><strong>{node.label}</strong><small>{node.kind}</small></div>
+      })}
+    </div>
+  }
 
   return (
-    <div className={`mini-run-graph status-${tile.status}`}>
+    <div className={`mini-run-graph ${expanded ? 'expanded' : ''} status-${tile.status}`}>
       <svg viewBox="0 0 720 190" preserveAspectRatio="none" aria-hidden="true">
         <path d="M120 95 C165 95 170 44 215 44" />
         <path d="M120 95 C165 95 170 146 215 146" />
@@ -48,217 +118,256 @@ function MiniRunGraph({ tile }: { tile: RunMonitorTile }) {
         <path d="M550 95 L605 95" />
         <path className="return-path" d="M490 132 C490 178 85 178 85 127" />
       </svg>
-      <div className={`monitor-node start ${nodeClass}`}><i /><strong>{steps[0]}</strong><small>Start</small></div>
+      <div className={`monitor-node start ${stateFor(steps[0], 0)}`}><i /><strong>{steps[0]}</strong><small>Start</small></div>
       <div className="monitor-parallel">
-        <div className="monitor-node"><i /><strong>{steps[1]}</strong><small>Agent</small></div>
-        <div className="monitor-node"><i /><strong>{steps[2]}</strong><small>Judge</small></div>
+        <div className={`monitor-node ${stateFor(steps[1], 1)}`}><i /><strong>{steps[1]}</strong><small>Agent</small></div>
+        <div className={`monitor-node ${stateFor(steps[2], 2)}`}><i /><strong>{steps[2]}</strong><small>Judge</small></div>
       </div>
-      <div className="monitor-node gate"><i /><strong>{steps[3]}</strong><small>Gate</small></div>
-      <div className="monitor-node end"><i /><strong>{steps[4]}</strong><small>Output</small></div>
+      <div className={`monitor-node gate ${stateFor(steps[3], 3)}`}><i /><strong>{steps[3]}</strong><small>Gate</small></div>
+      <div className={`monitor-node end ${stateFor(steps[4], 4)}`}><i /><strong>{steps[4]}</strong><small>Output</small></div>
     </div>
   )
 }
 
-export function RunBoard({ board, workflows, pendingRun, onChange, onOpenBuilder }: RunBoardProps) {
-  const [workflowId, setWorkflowId] = useState(workflows[0]?.id ?? '')
-  const [groupId, setGroupId] = useState(board.groups[0]?.id ?? '')
-  const [addingGroup, setAddingGroup] = useState(false)
-  const [groupName, setGroupName] = useState('')
-  const [draggedId, setDraggedId] = useState<string | null>(null)
-  const [removed, setRemoved] = useState<{ tile: RunMonitorTile; index: number } | null>(null)
-  const undoTimer = useRef<number | null>(null)
-  const counts = useMemo(() => ({
-    running: board.tiles.filter((tile) => tile.status === 'running').length,
-    waiting: board.tiles.filter((tile) => tile.status === 'waiting-runner').length,
-    attention: board.tiles.filter((tile) => tile.status === 'blocked').length,
-    arranged: board.tiles.length,
-  }), [board.tiles])
+function AgentAuthoringPanel({ onClose, onOpenBuilder }: { onClose: () => void; onOpenBuilder: () => void }) {
+  const command = 'npm run relay -- create .relay/workflows/my-workflow/workflow.json --name "My workflow"'
+  const prompt = `Create or update a Relay workflow in .relay/workflows/<name>/workflow.json. Use the relay-workflow CLI to add nodes and transitions, then run relay-workflow validate. Keep component instructions in .relay/components/*.md. Do not hand-edit canvas coordinates; the CLI assigns layout. Import the validated workflow into Relay for visual review.`
+  const [copied, setCopied] = useState(false)
+  const copy = async () => {
+    await navigator.clipboard.writeText(prompt)
+    setCopied(true)
+    window.setTimeout(() => setCopied(false), 1800)
+  }
+  return (
+    <section className="agent-authoring-panel">
+      <button className="panel-close" onClick={onClose} aria-label="Close agent authoring guide"><X size={15} /></button>
+      <div className="authoring-icon"><Bot size={18} /></div>
+      <div className="authoring-copy">
+        <span className="eyebrow">Agent-native authoring</span>
+        <h2>Let an agent construct the workflow as files</h2>
+        <p>The graph is canonical JSON, components are Markdown, and the CLI performs safe graph edits and validation. Relay remains the visual review and run surface.</p>
+        <div className="authoring-files">
+          <code><FileJson2 size={13} /> .relay/workflows/&lt;name&gt;/workflow.json</code>
+          <code><Code2 size={13} /> .relay/components/*.md</code>
+          <code><TerminalSquare size={13} /> {command}</code>
+        </div>
+      </div>
+      <div className="authoring-actions">
+        <button onClick={copy}>{copied ? <Check size={14} /> : <Copy size={14} />} {copied ? 'Copied' : 'Copy agent assignment'}</button>
+        <button className="primary-cta small" onClick={onOpenBuilder}>Open builder <ArrowRight size={13} /></button>
+      </div>
+    </section>
+  )
+}
+
+function ExpandedRun({ tile, onBack, onPatch }: { tile: RunMonitorTile; onBack: () => void; onPatch: (patch: Partial<RunMonitorTile>) => void }) {
+  const [observerUrl, setObserverUrl] = useState(tile.observerUrl ?? '')
+  const [token, setToken] = useState('')
+  const [connection, setConnection] = useState<'idle' | 'connecting' | 'live' | 'error'>('idle')
+  const [streamUrl, setStreamUrl] = useState('')
+  const [events, setEvents] = useState<RelayRunEvent[]>([])
+  const [filter, setFilter] = useState<'all' | 'agent' | 'tools' | 'decisions'>('all')
+  const eventEnd = useRef<HTMLDivElement>(null)
+  const patchRef = useRef(onPatch)
+  patchRef.current = onPatch
 
   useEffect(() => {
-    if (!workflows.some((workflow) => workflow.id === workflowId)) setWorkflowId(workflows[0]?.id ?? '')
-  }, [workflowId, workflows])
+    if (!streamUrl) return
+    setConnection('connecting')
+    const source = new EventSource(streamUrl)
+    const receive = (message: MessageEvent<string>) => {
+      try {
+        const event = JSON.parse(message.data) as RelayRunEvent
+        if (!event || typeof event.type !== 'string' || typeof event.seq !== 'number') return
+        setEvents((current) => [...current.filter((item) => item.seq !== event.seq), event].sort((a, b) => a.seq - b.seq).slice(-500))
+        setConnection('live')
+        if (['run.started', 'run.resumed'].includes(event.type)) patchRef.current({ status: 'running', updatedAt: event.time })
+        if (['approval.requested', 'run.paused', 'loop.exhausted'].includes(event.type)) patchRef.current({ status: 'blocked', updatedAt: event.time })
+        if (event.type === 'run.completed') patchRef.current({ status: 'completed', updatedAt: event.time })
+        if (['run.failed', 'run.cancelled'].includes(event.type)) patchRef.current({ status: 'blocked', updatedAt: event.time })
+      } catch { /* Ignore malformed runner events and keep the stream open. */ }
+    }
+    source.onopen = () => setConnection('live')
+    source.onmessage = receive
+    eventTypes.forEach((type) => source.addEventListener(type, receive as EventListener))
+    source.onerror = () => setConnection('error')
+    return () => source.close()
+  }, [streamUrl])
 
-  useEffect(() => {
-    if (!board.groups.some((group) => group.id === groupId)) setGroupId(board.groups[0]?.id ?? '')
-  }, [board.groups, groupId])
+  useEffect(() => { eventEnd.current?.scrollIntoView({ block: 'nearest' }) }, [events])
 
-  useEffect(() => () => {
-    if (undoTimer.current) window.clearTimeout(undoTimer.current)
-  }, [])
+  const connect = () => {
+    const base = observerUrl.trim().replace(/\/$/, '')
+    if (!base) return
+    try {
+      const endpoint = base.includes('/events') ? base : `${base}/v1/runs/${encodeURIComponent(tile.id)}/events`
+      const url = new URL(endpoint)
+      if (token.trim()) url.searchParams.set('token', token.trim())
+      onPatch({ observerUrl: base, status: tile.status === 'not-started' ? 'waiting-runner' : tile.status })
+      setStreamUrl(url.toString())
+    } catch { setConnection('error') }
+  }
 
-  const addMonitor = () => {
-    const workflow = workflows.find((item) => item.id === workflowId)
-    const destination = board.groups.find((group) => group.id === groupId) ?? board.groups[0]
-    if (!workflow || !destination) return
+  const sendControl = async (control: 'pause' | 'resume' | 'cancel') => {
+    const base = observerUrl.trim().replace(/\/$/, '')
+    if (!base) return
+    try {
+      const response = await fetch(`${base}/v1/runs/${encodeURIComponent(tile.id)}/${control}`, {
+        method: 'POST',
+        headers: token.trim() ? { Authorization: `Bearer ${token.trim()}` } : {},
+      })
+      if (!response.ok) throw new Error()
+    } catch { setConnection('error') }
+  }
+
+  const visibleEvents = events.filter((event) => {
+    if (filter === 'agent') return event.type.startsWith('agent.') || event.type.startsWith('node.')
+    if (filter === 'tools') return event.type.includes('.tool.') || event.type === 'artifact.created'
+    if (filter === 'decisions') return event.type.startsWith('route.') || event.type.startsWith('loop.') || event.type.startsWith('approval.') || event.type.startsWith('policy.')
+    return true
+  })
+  const copy = statusCopy[tile.status]
+
+  return (
+    <div className="run-detail">
+      <div className="run-detail-bar">
+        <button className="run-back" onClick={onBack}><ArrowLeft size={14} /> All running workflows</button>
+        <span className={`run-status-pill ${tile.status}`}><i /> {copy.label}</span>
+        <div className="run-operator-controls">
+          <button onClick={() => void sendControl(tile.status === 'blocked' ? 'resume' : 'pause')} disabled={!streamUrl || tile.status === 'completed'}>{tile.status === 'blocked' ? <Play size={13} /> : <Pause size={13} />} {tile.status === 'blocked' ? 'Resume' : 'Pause'}</button>
+          <button className="danger" onClick={() => void sendControl('cancel')} disabled={!streamUrl || tile.status === 'completed'}><CircleStop size={13} /> Cancel</button>
+        </div>
+      </div>
+
+      <header className="run-detail-heading">
+        <div><span className="eyebrow">Run {tile.id}</span><h1>{tile.workflowName}</h1><p>{tile.objective || 'No objective was supplied for this run.'}</p></div>
+        <div className="run-detail-meta"><span><FolderGit2 size={13} /> {tile.projectName || 'No project'}</span><span><Radio size={13} /> {connection === 'live' ? 'Runner connected' : connection === 'connecting' ? 'Connecting…' : connection === 'error' ? 'Runner unavailable' : 'Runner disconnected'}</span></div>
+      </header>
+
+      <div className="runner-connect">
+        <div><strong>Runner observer</strong><span>Connect to the loopback API printed by the Relay CLI. The capability token stays in this tab.</span></div>
+        <input value={observerUrl} onChange={(event) => setObserverUrl(event.target.value)} placeholder="http://127.0.0.1:4317" aria-label="Runner observer URL" />
+        <input value={token} onChange={(event) => setToken(event.target.value)} placeholder="Capability token (optional)" type="password" aria-label="Runner capability token" />
+        <button className="primary-cta small" onClick={connect} disabled={!observerUrl.trim()}><Radio size={13} /> {streamUrl ? 'Reconnect' : 'Connect stream'}</button>
+      </div>
+
+      <div className="run-split-view">
+        <section className="run-graph-panel">
+          <div className="run-panel-heading"><div><span className="eyebrow">Workflow state</span><h2>Execution graph</h2></div><span>{tile.graph?.nodes.length ?? Math.min(tile.steps.length, 5)} components</span></div>
+          <WorkflowRunGraph tile={tile} events={events} expanded />
+          <div className="run-graph-legend"><span><i className="active" /> Running</span><span><i className="complete" /> Complete</span><span><i className="attention" /> Attention</span></div>
+        </section>
+
+        <section className="agent-stream-panel">
+          <div className="run-panel-heading"><div><span className="eyebrow">Agent stream</span><h2>Live activity</h2></div><span>{events.length} events</span></div>
+          <div className="stream-filters">
+            {(['all', 'agent', 'tools', 'decisions'] as const).map((value) => <button key={value} className={filter === value ? 'active' : ''} onClick={() => setFilter(value)}>{value}</button>)}
+          </div>
+          <div className="agent-event-stream" role="log" aria-live="polite">
+            {visibleEvents.length ? visibleEvents.map((event) => <article className={`agent-event event-${event.type.split('.')[0]}`} key={`${event.seq}-${event.type}`}>
+              <time>{formatTime(event.time)}</time>
+              <span className="event-seq">#{event.seq}</span>
+              <div><strong>{event.type}</strong><p>{event.payload?.summary || event.payload?.command || event.payload?.tool || event.payload?.route || 'State updated'}</p><small>{[event.agentId, event.nodeId && `node: ${event.nodeId}`, event.attempt && `attempt ${event.attempt}`].filter(Boolean).join(' · ')}</small></div>
+            </article>) : <div className="stream-empty"><TerminalSquare size={22} /><strong>{streamUrl ? 'Waiting for the first runner event' : 'Connect a runner to see the agent work'}</strong><span>Relay displays the append-only event stream. It does not invent terminal output or workflow state.</span><code>relay connect --run {tile.id}</code></div>}
+            <div ref={eventEnd} />
+          </div>
+        </section>
+      </div>
+    </div>
+  )
+}
+
+export function RunBoard({ board, workflows, stagedRuns, onUpdateStagedRuns, onChange, onOpenBuilder }: RunBoardProps) {
+  const [section, setSection] = useState<'staged' | 'running'>(stagedRuns.length ? 'staged' : 'running')
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'attention' | 'completed'>('all')
+  const [authoringOpen, setAuthoringOpen] = useState(false)
+  const selectedTile = board.tiles.find((tile) => tile.id === selectedRunId)
+
+  const patchTile = useCallback((id: string, patch: Partial<RunMonitorTile>) => {
+    onChange({ ...board, tiles: board.tiles.map((tile) => tile.id === id ? { ...tile, ...patch } : tile) })
+  }, [board, onChange])
+
+  const startStaged = (run: PendingRun) => {
+    const workflow = workflows.find((item) => item.id === run.workflowId || item.name === run.workflowName)
+    const group = board.groups.find((item) => item.projectName === run.projectName) ?? board.groups[0]
+    if (!group) return
     const tile: RunMonitorTile = {
-      id: `monitor-${Date.now()}`,
-      groupId: destination.id,
-      workflowId: workflow.id,
-      workflowName: workflow.name,
-      projectName: destination.projectName,
-      status: 'not-started',
-      steps: workflow.steps ?? ['Prepare', 'Implement', 'Review', 'Verify', 'Handoff'],
-      createdAt: new Date().toISOString(),
+      id: run.id,
+      groupId: group.id,
+      workflowId: workflow?.id ?? run.workflowId,
+      workflowName: run.workflowName,
+      objective: run.configuration.task,
+      projectName: run.projectName,
+      status: 'waiting-runner',
+      steps: workflow?.steps ?? ['Prepare', 'Implement', 'Review', 'Verify', 'Handoff'],
+      createdAt: run.createdAt,
+      updatedAt: new Date().toISOString(),
+      graph: run.graph,
     }
-    onChange({ ...board, tiles: [...board.tiles, tile] })
+    onChange({ ...board, tiles: [tile, ...board.tiles.filter((item) => item.id !== run.id)] })
+    onUpdateStagedRuns(stagedRuns.filter((item) => item.id !== run.id))
+    setSection('running')
+    setSelectedRunId(run.id)
   }
 
-  const addGroup = () => {
-    const name = groupName.trim()
-    if (!name) return
-    const baseId = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'section'
-    let id = baseId
-    let suffix = 2
-    while (board.groups.some((group) => group.id === id)) {
-      id = `${baseId}-${suffix}`
-      suffix += 1
-    }
-    onChange({ ...board, groups: [...board.groups, { id, name }] })
-    setGroupId(id)
-    setGroupName('')
-    setAddingGroup(false)
-  }
+  const filteredTiles = board.tiles.filter((tile) => {
+    const query = search.trim().toLowerCase()
+    const matchesSearch = !query || `${tile.workflowName} ${tile.objective ?? ''} ${tile.projectName ?? ''}`.toLowerCase().includes(query)
+    const matchesStatus = statusFilter === 'all'
+      || (statusFilter === 'active' && ['waiting-runner', 'running'].includes(tile.status))
+      || (statusFilter === 'attention' && tile.status === 'blocked')
+      || (statusFilter === 'completed' && tile.status === 'completed')
+    return matchesSearch && matchesStatus
+  })
 
-  const moveTile = (targetId: string) => {
-    if (!draggedId || draggedId === targetId) return
-    const current = [...board.tiles]
-    const from = current.findIndex((tile) => tile.id === draggedId)
-    const to = current.findIndex((tile) => tile.id === targetId)
-    if (from < 0 || to < 0) return
-    const destinationGroupId = current[to].groupId
-    const [moved] = current.splice(from, 1)
-    moved.groupId = destinationGroupId
-    current.splice(from < to ? to - 1 : to, 0, moved)
-    onChange({ ...board, tiles: current })
-    setDraggedId(null)
-  }
-
-  const moveTileBy = (tileId: string, offset: -1 | 1) => {
-    const tile = board.tiles.find((item) => item.id === tileId)
-    if (!tile) return
-    const siblings = board.tiles.filter((item) => item.groupId === tile.groupId)
-    const siblingIndex = siblings.findIndex((item) => item.id === tileId)
-    const target = siblings[siblingIndex + offset]
-    if (!target) return
-    const current = [...board.tiles]
-    const from = current.findIndex((item) => item.id === tileId)
-    const to = current.findIndex((item) => item.id === target.id)
-    ;[current[from], current[to]] = [current[to], current[from]]
-    onChange({ ...board, tiles: current })
-  }
-
-  const removeTile = (tile: RunMonitorTile) => {
-    if (undoTimer.current) window.clearTimeout(undoTimer.current)
-    const index = board.tiles.findIndex((item) => item.id === tile.id)
-    setRemoved({ tile, index })
-    onChange({ ...board, tiles: board.tiles.filter((item) => item.id !== tile.id) })
-    undoTimer.current = window.setTimeout(() => setRemoved(null), 5000)
-  }
-
-  const undoRemove = () => {
-    if (!removed) return
-    if (undoTimer.current) window.clearTimeout(undoTimer.current)
-    const tiles = [...board.tiles]
-    tiles.splice(Math.min(Math.max(removed.index, 0), tiles.length), 0, removed.tile)
-    onChange({ ...board, tiles })
-    setRemoved(null)
-  }
+  if (selectedTile) return <ExpandedRun tile={selectedTile} onBack={() => setSelectedRunId(null)} onPatch={(patch) => patchTile(selectedTile.id, patch)} />
 
   return (
     <div className="run-board-shell">
-      <div className="run-board-heading">
-        <div>
-          <span className="eyebrow">Monitoring workspace</span>
-          <input value={board.name} onChange={(event) => onChange({ ...board, name: event.target.value })} aria-label="Monitoring board name" />
-          <p>Arrange the runs that belong together. Status remains disconnected until a Relay runner streams real events.</p>
-        </div>
-        <div className="board-summary">
-          <span><i className="running" /> <strong>{counts.running}</strong> active</span>
-          <span><i className="waiting" /> <strong>{counts.waiting}</strong> waiting</span>
-          <span><i className="attention" /> <strong>{counts.attention}</strong> attention</span>
-          <span><LayoutGrid size={13} /> <strong>{counts.arranged}</strong> arranged</span>
-        </div>
+      <div className="runs-heading">
+        <div><span className="eyebrow">Operations</span><h1>Runs</h1><p>Prepare work before it starts, then watch the workflow and agent stream while it runs.</p></div>
+        <button className="subtle-button" onClick={() => setAuthoringOpen((current) => !current)}><Bot size={14} /> Build with agent</button>
       </div>
 
-      <div className="run-board-toolbar">
-        <div className="add-monitor-control">
-          <select value={workflowId} onChange={(event) => setWorkflowId(event.target.value)} aria-label="Workflow to monitor">
-            {!workflows.length && <option value="">No saved workflows</option>}
-            {workflows.map((workflow) => <option value={workflow.id} key={workflow.id}>{workflow.name}</option>)}
-          </select>
-          <select value={groupId} onChange={(event) => setGroupId(event.target.value)} aria-label="Monitoring group">
-            {board.groups.map((group) => <option value={group.id} key={group.id}>{group.name}</option>)}
-          </select>
-          <button className="primary-cta small" onClick={addMonitor} disabled={!workflowId || !groupId}><Plus size={14} /> Add run view</button>
-        </div>
-        <div className="board-view-controls">
-          <button className={board.columns === 1 ? 'active' : ''} onClick={() => onChange({ ...board, columns: 1 })} aria-label="One column"><Rows3 size={15} /></button>
-          <button className={board.columns === 2 ? 'active' : ''} onClick={() => onChange({ ...board, columns: 2 })} aria-label="Two columns"><Columns2 size={15} /></button>
-          <button onClick={() => setAddingGroup(true)}><Plus size={14} /> Section</button>
-        </div>
+      {authoringOpen && <AgentAuthoringPanel onClose={() => setAuthoringOpen(false)} onOpenBuilder={onOpenBuilder} />}
+
+      <div className="run-section-tabs" role="tablist" aria-label="Run state">
+        <button role="tab" aria-selected={section === 'staged'} className={section === 'staged' ? 'active' : ''} onClick={() => setSection('staged')}><span><FileJson2 size={15} /> Staged</span><em>{stagedRuns.length}</em><small>Prepared and editable</small></button>
+        <button role="tab" aria-selected={section === 'running'} className={section === 'running' ? 'active' : ''} onClick={() => setSection('running')}><span><Activity size={15} /> Running</span><em>{board.tiles.length}</em><small>Live, blocked, and complete</small></button>
       </div>
 
-      {addingGroup && <div className="add-group-row"><input autoFocus value={groupName} onChange={(event) => setGroupName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') addGroup(); if (event.key === 'Escape') setAddingGroup(false) }} placeholder="Section name, e.g. Checkout services" aria-label="New section name" /><button onClick={() => setAddingGroup(false)}>Cancel</button><button className="primary-cta small" onClick={addGroup} disabled={!groupName.trim()}>Add section</button></div>}
-
-      <div className="monitor-groups">
-        {board.groups.map((group) => {
-          const tiles = board.tiles.filter((tile) => tile.groupId === group.id)
-          return (
-            <section className="monitor-group" key={group.id}>
-              <div className="monitor-group-heading">
-                <span className="group-icon"><Layers3 size={15} /></span>
-                <div><h2>{group.name}</h2><p>{group.projectName || 'Cross-project'} · {tiles.length} run{tiles.length === 1 ? '' : 's'}</p></div>
-                <span className="group-health"><i /> {tiles.some((tile) => tile.status === 'blocked') ? 'Attention required' : tiles.some((tile) => tile.status === 'running') ? 'Activity live' : 'No active runner'}</span>
-              </div>
-              {tiles.length ? <div className={`monitor-grid columns-${board.columns}`}>
-                {tiles.map((tile) => {
-                  const copy = statusCopy[tile.status]
-                  return (
-                    <article
-                      className={`run-monitor-tile status-${tile.status}`}
-                      key={tile.id}
-                      draggable
-                      tabIndex={0}
-                      aria-label={`${tile.workflowName}. ${copy.label}. Hold Alt and press left or right arrow to reorder.`}
-                      onDragStart={() => setDraggedId(tile.id)}
-                      onDragOver={(event) => event.preventDefault()}
-                      onDrop={() => moveTile(tile.id)}
-                      onKeyDown={(event) => {
-                        if (!event.altKey || (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight')) return
-                        event.preventDefault()
-                        moveTileBy(tile.id, event.key === 'ArrowLeft' ? -1 : 1)
-                      }}
-                    >
-                      <div className="run-tile-heading">
-                        <span className="drag-handle"><GripVertical size={15} /></span>
-                        <span className="run-state-icon"><Radio size={15} /></span>
-                        <div><h3>{tile.workflowName}</h3><p>{tile.objective || 'No run objective yet.'}</p></div>
-                        <span className={`run-status-pill ${tile.status}`}><i /> {copy.label}</span>
-                        <button className="tile-menu" onClick={() => removeTile(tile)} aria-label={`Remove ${tile.workflowName} from board`}><Trash2 size={14} /></button>
-                      </div>
-
-                      {(tile.catalyst || tile.parentWorkflow) && <div className="run-provenance">
-                        {tile.catalyst && <span><Link2 size={12} /> {tile.catalyst}</span>}
-                        {tile.parentWorkflow && <span><Workflow size={12} /> Parent: {tile.parentWorkflow}</span>}
-                      </div>}
-
-                      <MiniRunGraph tile={tile} />
-
-                      <div className="run-tile-footer">
-                        <div><strong>{copy.label}</strong><span>{copy.detail}</span></div>
-                        {tile.status === 'waiting-runner' ? <code><TerminalSquare size={13} /> relay connect</code> : tile.status === 'not-started' ? <button onClick={onOpenBuilder}>Prepare run <ArrowRight size={13} /></button> : <span className="runner-detail-note">Runner detail unavailable</span>}
-                      </div>
-                    </article>
-                  )
-                })}
-              </div> : <div className="monitor-group-empty"><Workflow size={20} /><div><strong>No runs arranged in this section</strong><span>Select a saved workflow above to add a monitor tile. This does not start execution.</span></div></div>}
-            </section>
-          )
-        })}
-      </div>
-
-      {!pendingRun && board.tiles.length === 0 && <div className="monitor-board-onboarding"><AlertTriangle size={15} /><span>The board is ready, but no run has been prepared. Adding a view organizes it only; execution still starts from the workflow builder and connects through the CLI.</span></div>}
-      {removed && <div className="board-undo" role="status" aria-live="polite"><span>Removed <strong>{removed.tile.workflowName}</strong></span><button onClick={undoRemove}>Undo</button></div>}
+      {section === 'staged' ? <section className="runs-section">
+        <div className="runs-section-heading"><div><h2>Staged workflows</h2><p>These assignments can still be edited. Starting one moves it into Running and waits for its local driver.</p></div><button className="primary-cta small" onClick={onOpenBuilder}>Stage a workflow <ArrowRight size={13} /></button></div>
+        {stagedRuns.length ? <div className="staged-run-list">
+          <div className="staged-list-header"><span>Workflow and objective</span><span>Project</span><span>Run policy</span><span>Prepared</span><span /></div>
+          {stagedRuns.map((run) => <article className="staged-run-row" key={run.id}>
+            <div className="staged-run-name"><span><Workflow size={15} /></span><div><strong>{run.workflowName}</strong><p>{run.configuration.task}</p></div></div>
+            <span>{run.projectName || 'No project'}</span>
+            <div className="run-policy"><span>{run.configuration.autonomy}</span><span>{run.configuration.execution === 'dry-run' ? 'dry run' : 'execute'}</span></div>
+            <time>{new Date(run.createdAt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</time>
+            <div className="staged-actions"><button onClick={onOpenBuilder}>Edit</button><button className="start-staged" onClick={() => startStaged(run)}><Play size={12} /> Start</button><button className="remove-staged" onClick={() => onUpdateStagedRuns(stagedRuns.filter((item) => item.id !== run.id))} aria-label={`Delete ${run.workflowName} staged run`}><Trash2 size={13} /></button></div>
+          </article>)}
+        </div> : <div className="runs-empty"><FileJson2 size={24} /><h2>No staged workflows</h2><p>Use the builder to define an objective and run policy. Relay will hold the assignment here until you start it.</p><button className="primary-cta small" onClick={onOpenBuilder}>Open builder</button></div>}
+      </section> : <section className="runs-section">
+        <div className="running-toolbar">
+          <div className="run-search"><Search size={14} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search runs" aria-label="Search runs" /></div>
+          <div className="run-status-filters">{(['all', 'active', 'attention', 'completed'] as const).map((value) => <button className={statusFilter === value ? 'active' : ''} onClick={() => setStatusFilter(value)} key={value}>{value}</button>)}</div>
+        </div>
+        {filteredTiles.length ? <div className={`monitor-grid columns-${board.columns}`}>
+          {filteredTiles.map((tile) => {
+            const copy = statusCopy[tile.status]
+            return <article className={`run-monitor-tile status-${tile.status}`} key={tile.id}>
+              <button className="run-tile-open" onClick={() => setSelectedRunId(tile.id)} aria-label={`Open ${tile.workflowName} run`}>
+                <div className="run-tile-heading"><span className="run-state-icon"><Radio size={15} /></span><div><h3>{tile.workflowName}</h3><p>{tile.objective || 'No run objective.'}</p></div><span className={`run-status-pill ${tile.status}`}><i /> {copy.label}</span><ChevronRight size={15} /></div>
+                <WorkflowRunGraph tile={tile} />
+                <div className="run-tile-footer"><div><strong>{tile.projectName || 'No project'}</strong><span>{copy.detail}</span></div><span className="open-run-label">Open live view <ArrowRight size={12} /></span></div>
+              </button>
+            </article>
+          })}
+        </div> : <div className="runs-empty"><Activity size={24} /><h2>{board.tiles.length ? 'No runs match this view' : 'No running workflows'}</h2><p>{board.tiles.length ? 'Change the status filter or search query.' : 'Start a staged workflow first. It will appear here while waiting for the runner.'}</p>{!board.tiles.length && <button className="primary-cta small" onClick={() => setSection('staged')}>View staged workflows</button>}</div>}
+      </section>}
     </div>
   )
 }

@@ -91,11 +91,13 @@ const isPendingRun = (value: unknown): value is PendingRun => isRecord(value)
   && typeof value.id === 'string'
   && typeof value.workflowName === 'string'
   && typeof value.createdAt === 'string'
-  && value.state === 'waiting-for-runner'
+  && ['staged', 'waiting-for-runner'].includes(String(value.state))
   && isRecord(value.configuration)
   && typeof value.configuration.task === 'string'
   && ['guided', 'adaptive', 'autonomous'].includes(String(value.configuration.autonomy))
   && ['execute', 'dry-run'].includes(String(value.configuration.execution))
+
+const isPendingRunList = (value: unknown): value is PendingRun[] => Array.isArray(value) && value.every(isPendingRun)
 
 const isCatalystList = (value: unknown): value is CatalystDefinition[] => Array.isArray(value) && value.every((item) =>
   isRecord(item)
@@ -628,16 +630,22 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
     setKickoffTask(configuration.task)
     onPrepareRun({
       id: `run-${Date.now()}`,
+      workflowId,
       workflowName,
       projectName: project.root ? project.name : undefined,
       configuration,
       createdAt: new Date().toISOString(),
-      state: 'waiting-for-runner',
+      state: 'staged',
+      preparedBy: 'user',
+      graph: {
+        nodes: nodes.map((node) => ({ id: node.id, label: node.data.label, kind: node.data.kind, x: node.position.x, y: node.position.y })),
+        edges: edges.map((item) => ({ id: item.id, source: item.source, target: item.target, label: item.data?.label, tone: item.data?.tone })),
+      },
     })
-    showToast('Run prepared — connect the Relay CLI to execute')
+    showToast('Workflow staged — start it from Runs when ready')
     await sleep(450)
     onNavigate('runs')
-  }, [onNavigate, onPrepareRun, project.name, project.root, showToast, workflowName])
+  }, [edges, nodes, onNavigate, onPrepareRun, project.name, project.root, showToast, workflowId, workflowName])
 
   return (
     <main className="app-shell">
@@ -793,9 +801,12 @@ export default function App() {
   const [workflows, setWorkflows] = useState<WorkflowRecord[]>(() => readStored('relay.workflows', [starterWorkflow], isWorkflowRecordList))
   const [userTemplates, setUserTemplates] = useState<WorkflowTemplate[]>(() => readStored('relay.userTemplates', [], isWorkflowTemplateList))
   const [builderTemplate, setBuilderTemplate] = useState<WorkflowTemplate | undefined>(undefined)
-  const [pendingRun, setPendingRun] = useState<PendingRun | null>(() => readStored<PendingRun | null>(
-    'relay.pendingRun', null, (value): value is PendingRun | null => value === null || isPendingRun(value),
-  ))
+  const [stagedRuns, setStagedRuns] = useState<PendingRun[]>(() => {
+    const saved = readStored('relay.stagedRuns', [], isPendingRunList)
+    if (saved.length) return saved
+    const legacy = readStored<PendingRun | null>('relay.pendingRun', null, (value): value is PendingRun | null => value === null || isPendingRun(value))
+    return legacy ? [{ ...legacy, state: 'staged' }] : []
+  })
   const [catalysts, setCatalysts] = useState<CatalystDefinition[]>(() => readStored('relay.catalysts', [], isCatalystList))
   const [monitorBoard, setMonitorBoard] = useState<RunMonitorBoard>(() => {
     const fallback: RunMonitorBoard = {
@@ -822,33 +833,8 @@ export default function App() {
   useEffect(() => { writeStored('relay.userTemplates', userTemplates) }, [userTemplates])
   useEffect(() => { writeStored('relay.catalysts', catalysts) }, [catalysts])
   useEffect(() => { writeStored('relay.monitorBoard', monitorBoard) }, [monitorBoard])
-  useEffect(() => {
-    if (pendingRun) writeStored('relay.pendingRun', pendingRun)
-    else removeStored('relay.pendingRun')
-  }, [pendingRun])
-  useEffect(() => {
-    if (!pendingRun) return
-    setMonitorBoard((current) => {
-      if (current.tiles.some((tile) => tile.id === pendingRun.id)) return current
-      const workflow = workflows.find((item) => item.name === pendingRun.workflowName)
-      const group = current.groups.find((item) => item.projectName === pendingRun.projectName) ?? current.groups[0]
-      if (!group) return current
-      return {
-        ...current,
-        tiles: [...current.tiles, {
-          id: pendingRun.id,
-          groupId: group.id,
-          workflowId: workflow?.id,
-          workflowName: pendingRun.workflowName,
-          objective: pendingRun.configuration.task,
-          projectName: pendingRun.projectName,
-          status: 'waiting-runner',
-          steps: workflow?.steps ?? ['Implement', 'Review', 'Verify', 'Gate', 'Handoff'],
-          createdAt: pendingRun.createdAt,
-        }],
-      }
-    })
-  }, [pendingRun, workflows])
+  useEffect(() => { writeStored('relay.stagedRuns', stagedRuns) }, [stagedRuns])
+  useEffect(() => { removeStored('relay.pendingRun') }, [])
   useEffect(() => {
     document.documentElement.dataset.theme = theme
     try { window.localStorage.setItem('relay.theme', theme) } catch { /* Theme still applies for this session. */ }
@@ -880,7 +866,7 @@ export default function App() {
           theme={theme}
           onToggleTheme={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')}
           onWorkflowSaved={(workflow) => setWorkflows((current) => [workflow, ...current.filter((item) => item.id !== workflow.id)])}
-          onPrepareRun={setPendingRun}
+          onPrepareRun={(run) => setStagedRuns((current) => [run, ...current.filter((item) => item.id !== run.id)])}
           startingTemplate={builderTemplate}
           workflows={workflows}
           catalysts={catalysts}
@@ -905,7 +891,8 @@ export default function App() {
       onCreateTemplate={(template) => setUserTemplates((current) => [template, ...current.filter((item) => item.id !== template.id)])}
       onToggleTemplatePublished={(id) => setUserTemplates((current) => current.map((template) => template.id === id ? { ...template, published: !template.published } : template))}
       onUseTemplate={(template) => { removeStored('relay.workflow'); setBuilderTemplate(template); navigate('builder') }}
-      pendingRun={pendingRun}
+      stagedRuns={stagedRuns}
+      onUpdateStagedRuns={setStagedRuns}
       monitorBoard={monitorBoard}
       onUpdateMonitorBoard={setMonitorBoard}
       catalysts={catalysts}
