@@ -18,6 +18,8 @@ The board is the editor. Markdown files are the source of truth. A workflow conn
 - Dashboard pages for workflows, components, projects, templates, and live runs
 - Driver-ready `.relay.json` assignment bundles with embedded Markdown and execution policies
 - Split-view control room for graph state and parallel agent lanes
+- Task-first run setup with guided, adaptive, and full-autonomous execution modes
+- Persistent dark and light themes
 - Simulated execution states that demonstrate a failed visual review and retry
 - A typed workflow document model ready for a real runner
 

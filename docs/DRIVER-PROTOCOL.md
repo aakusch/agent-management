@@ -14,6 +14,16 @@ Resume existing state if its run directory exists.
 Do not exceed the declared permissions or stop conditions.
 ```
 
+When the website starts a connected run, it sends the assignment together with a run configuration. The task/objective is the kickoff prompt and the only required user-authored field. Additional context, execution type, duration, and cost limits are optional overrides.
+
+Autonomy modes are:
+
+- `guided`: ask before scope changes and permissioned actions;
+- `adaptive`: make safe decisions and ask when confidence is low;
+- `autonomous`: bypass run-time permission prompts and execute end-to-end.
+
+Autonomous mode cannot widen operating-system, workspace, organization, or provider hard limits. Those remain outside the run's authority.
+
 ## Driver responsibilities
 
 The driver is the only owner of graph state. Worker agents do not decide what runs next.

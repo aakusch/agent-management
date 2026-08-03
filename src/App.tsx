@@ -24,14 +24,17 @@ import {
   LayoutTemplate,
   LayoutDashboard,
   Menu,
+  Moon,
   MoreHorizontal,
   Play,
   Plus,
   Sparkles,
+  Sun,
 } from 'lucide-react'
 import { Inspector } from './components/Inspector'
 import { Library } from './components/Library'
 import { Management, type AppPage } from './components/Management'
+import { StartRunModal, type RunConfiguration } from './components/StartRunModal'
 import { WorkflowEdge } from './components/WorkflowEdge'
 import { WorkflowNode } from './components/WorkflowNode'
 import { componentById, componentLibrary } from './data/library'
@@ -133,15 +136,19 @@ interface WorkspaceProps {
   components: ComponentTemplate[]
   onImportComponents: (components: ComponentTemplate[]) => void
   onNavigate: (page: AppPage) => void
+  theme: 'dark' | 'light'
+  onToggleTheme: () => void
 }
 
-function Workspace({ project, onUpdateProject, components, onImportComponents, onNavigate }: WorkspaceProps) {
+function Workspace({ project, onUpdateProject, components, onImportComponents, onNavigate, theme, onToggleTheme }: WorkspaceProps) {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
   const [workflowName, setWorkflowName] = useState('UI quality loop')
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [libraryOpen, setLibraryOpen] = useState(true)
   const [running, setRunning] = useState(false)
+  const [startRunOpen, setStartRunOpen] = useState(false)
+  const [kickoffTask, setKickoffTask] = useState('')
   const [saveState, setSaveState] = useState<'saved' | 'saving'>('saved')
   const [toast, setToast] = useState<string | null>(null)
   const importInput = useRef<HTMLInputElement>(null)
@@ -229,7 +236,7 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
       assignment: {
         id: `assignment-${Date.now()}`,
         title: workflowName,
-        task: 'Complete the supplied task by executing the workflow graph and preserving its decision history.',
+        task: kickoffTask || 'Complete the supplied task by executing the workflow graph and preserving its decision history.',
         createdAt,
       },
       workflow: documentForExport(),
@@ -256,7 +263,7 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
         },
       },
     }
-  }, [components, documentForExport, nodes, workflowName])
+  }, [components, documentForExport, kickoffTask, nodes, workflowName])
 
   const saveWorkflow = useCallback(async () => {
     setSaveState('saving')
@@ -300,8 +307,9 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
     }
   }, [fitView, onImportComponents, onUpdateProject, setEdges, setNodes, showToast])
 
-  const runWorkflow = useCallback(async () => {
+  const runWorkflow = useCallback(async (configuration: RunConfiguration) => {
     if (running) return
+    setKickoffTask(configuration.task)
     setRunning(true)
     setNodes((current) => current.map((node) => ({
       ...node,
@@ -330,7 +338,7 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
     await sleep(650)
     setNodeStatus('ship', 'passed', 'PR summary ready')
     setRunning(false)
-    showToast('Run completed after 1 revision')
+    showToast(`${configuration.autonomy === 'autonomous' ? 'Autonomous run' : 'Run'} completed after 1 revision`)
   }, [running, setNodeStatus, setNodes, showToast])
 
   return (
@@ -368,6 +376,9 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
             {saveState === 'saved' ? <Check size={15} /> : <Cloud className="pulse" size={15} />}
             {saveState === 'saved' ? 'Saved' : 'Save'}
           </button>
+          <button className="icon-button theme-toggle" onClick={onToggleTheme} aria-label={`Use ${theme === 'dark' ? 'light' : 'dark'} theme`}>
+            {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
+          </button>
           <button className="icon-button" onClick={() => onNavigate('runs')} aria-label="View runs"><MoreHorizontal size={18} /></button>
         </div>
       </header>
@@ -393,7 +404,7 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
             <div className="toolbar-actions">
               <button className="subtle-button" onClick={() => onNavigate('templates')}><LayoutTemplate size={15} /> Templates</button>
               <button className="subtle-button" onClick={() => onNavigate('projects')}><Plus size={15} /> Variable</button>
-              <button className="run-button" disabled={running} onClick={() => void runWorkflow()}>
+              <button className="run-button" disabled={running} onClick={() => setStartRunOpen(true)}>
                 <Play size={14} fill="currentColor" /> {running ? 'Running…' : 'Run workflow'}
               </button>
             </div>
@@ -441,6 +452,7 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
           onUpdateProject={(nextProject) => { onUpdateProject(nextProject); setSaveState('saving') }}
         />
       </div>
+      {startRunOpen && <StartRunModal workflowName={workflowName} projectName={project.name} onClose={() => setStartRunOpen(false)} onStart={(configuration) => { setStartRunOpen(false); void runWorkflow(configuration) }} />}
       {toast && <div className="toast"><Check size={15} /> {toast}</div>}
     </main>
   )
@@ -457,6 +469,7 @@ export default function App() {
     return validPages.includes(candidate) ? candidate : 'dashboard'
   }
   const [page, setPage] = useState<AppPage>(pageFromHash)
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => localStorage.getItem('relay.theme') === 'light' ? 'light' : 'dark')
   const [project, setProject] = useState<ProjectContext>(() => {
     const saved = localStorage.getItem('relay.project')
     return saved ? JSON.parse(saved) as ProjectContext : projectSeed
@@ -477,6 +490,10 @@ export default function App() {
   })
   useEffect(() => localStorage.setItem('relay.project', JSON.stringify(project)), [project])
   useEffect(() => localStorage.setItem('relay.components', JSON.stringify(customComponents)), [customComponents])
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme
+    localStorage.setItem('relay.theme', theme)
+  }, [theme])
 
   const navigate = (nextPage: AppPage) => {
     window.location.hash = `/${nextPage}`
@@ -500,6 +517,8 @@ export default function App() {
           components={components}
           onImportComponents={mergeComponents}
           onNavigate={navigate}
+          theme={theme}
+          onToggleTheme={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')}
         />
       </ReactFlowProvider>
     )
@@ -513,6 +532,8 @@ export default function App() {
       onUpdateProject={setProject}
       components={components}
       onCreateComponent={(component) => setCustomComponents((current) => [...current.filter((item) => item.id !== component.id), component])}
+      theme={theme}
+      onToggleTheme={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')}
     />
   )
 }

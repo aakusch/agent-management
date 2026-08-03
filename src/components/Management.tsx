@@ -15,12 +15,14 @@ import {
   GitBranch,
   Home,
   Layers3,
+  Moon,
   Play,
   Plus,
   Search,
   Settings2,
   ShieldCheck,
   Sparkles,
+  Sun,
   TerminalSquare,
   Workflow,
   X,
@@ -36,6 +38,8 @@ interface ManagementProps {
   onUpdateProject: (project: ProjectContext) => void
   components: ComponentTemplate[]
   onCreateComponent: (component: ComponentTemplate) => void
+  theme: 'dark' | 'light'
+  onToggleTheme: () => void
 }
 
 const pageLabels: Record<Exclude<AppPage, 'builder'>, string> = {
@@ -63,6 +67,8 @@ export function Management({
   onUpdateProject,
   components,
   onCreateComponent,
+  theme,
+  onToggleTheme,
 }: ManagementProps) {
   return (
     <main className="app-shell management-shell">
@@ -76,6 +82,9 @@ export function Management({
         <span className="topbar-page">{pageLabels[page]}</span>
         <div className="topbar-actions">
           <button className="subtle-button" onClick={() => onNavigate('projects')}><FolderGit2 size={15} /> {project.name}</button>
+          <button className="icon-button theme-toggle" onClick={onToggleTheme} aria-label={`Use ${theme === 'dark' ? 'light' : 'dark'} theme`}>
+            {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
+          </button>
           <button className="run-button" onClick={() => onNavigate('builder')}><Plus size={14} /> Open builder</button>
         </div>
       </header>

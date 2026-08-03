@@ -63,6 +63,8 @@ A human node pauses rather than polls. It presents a focused decision, relevant 
 
 Relay uses progressive disclosure rather than separate “simple” and “expert” products. Dashboard and templates explain outcomes in ordinary language; the builder exposes graph structure; source, contracts, permissions, and event logs remain one layer deeper for technical users.
 
+Starting a run is task-first. The large objective field is explicitly the kickoff prompt sent to the driver. Autonomy is a simple choice—guided, adaptive, or full autonomous—while dry-run mode, time and cost overrides, and extra context stay optional under an advanced disclosure. A workflow remains runnable when those optional fields are empty because workflow and workspace defaults supply the policy.
+
 ### 1. Builder
 
 The canvas shown in the MVP: component library, graph editing, node inspector, variables, templates, validation, and a compiled-instruction preview.
