@@ -1023,8 +1023,9 @@ export default function App() {
   }, [theme])
 
   const navigate = (nextPage: AppPage) => {
-    window.location.hash = `/${nextPage}`
-    setPage(nextPage)
+    const destination = nextPage === 'catalysts' ? 'components' : nextPage
+    window.location.hash = `/${destination}`
+    setPage(destination)
   }
   const mergeComponents = (incoming: ComponentTemplate[]) => {
     const builtInIds = new Set(componentLibrary.map((item) => item.id))
@@ -1100,6 +1101,7 @@ export default function App() {
       components={components}
       modules={modules}
       onCreateComponent={(component) => setCustomComponents((current) => [...current.filter((item) => item.id !== component.id), component])}
+      onCreateModule={(module) => setCustomModules((current) => [module, ...current.filter((item) => item.id !== module.id)])}
       theme={theme}
       onToggleTheme={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')}
       workflows={workflows}

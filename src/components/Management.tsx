@@ -58,6 +58,7 @@ interface ManagementProps {
   components: ComponentTemplate[]
   modules: WorkflowModuleDefinition[]
   onCreateComponent: (component: ComponentTemplate) => void
+  onCreateModule: (module: WorkflowModuleDefinition) => void
   theme: 'dark' | 'light'
   onToggleTheme: () => void
   workflows: WorkflowRecord[]
@@ -87,7 +88,6 @@ const pageLabels: Record<Exclude<AppPage, 'builder'>, string> = {
 
 const navSections = [
   { label: 'Build', items: [
-    { id: 'catalysts', label: 'Catalysts', icon: Zap },
     { id: 'components', label: 'Components', icon: Blocks },
     { id: 'workflows', label: 'Workflows', icon: Workflow },
   ] },
@@ -139,6 +139,7 @@ export function Management({
   components,
   modules,
   onCreateComponent,
+  onCreateModule,
   theme,
   onToggleTheme,
   workflows,
@@ -214,7 +215,7 @@ export function Management({
         <section className="management-content">
           {page === 'dashboard' && <Dashboard onNavigate={onNavigate} project={project} components={components} workflows={workflows} />}
           {page === 'workflows' && <WorkflowsPage onNavigate={onNavigate} workflows={workflows} projectName={project.name} onStageWorkflow={onStageWorkflow} />}
-          {page === 'components' && <ComponentsPage components={components} modules={modules} onCreate={onCreateComponent} />}
+          {page === 'components' && <ComponentsPage components={components} modules={modules} onCreate={onCreateComponent} onCreateModule={onCreateModule} catalysts={catalysts} workflows={workflows} onCreateCatalyst={onCreateCatalyst} onToggleCatalyst={onToggleCatalyst} />}
           {page === 'projects' && <ProjectsPage project={project} onUpdate={onUpdateProject} />}
           {page === 'templates' && <TemplatesPage templates={templates} modules={modules} onCreate={onCreateTemplate} onTogglePublished={onToggleTemplatePublished} onUseTemplate={onUseTemplate} />}
           {page === 'catalysts' && <CatalystsPage catalysts={catalysts} workflows={workflows} onCreate={onCreateCatalyst} onToggle={onToggleCatalyst} />}
@@ -305,30 +306,67 @@ function WorkflowsPage({ onNavigate, workflows, projectName, onStageWorkflow }: 
   </>
 }
 
-function ComponentsPage({ components, modules, onCreate }: { components: ComponentTemplate[]; modules: WorkflowModuleDefinition[]; onCreate: (component: ComponentTemplate) => void }) {
+function ComponentsPage({ components, modules, onCreate, onCreateModule, catalysts, workflows, onCreateCatalyst, onToggleCatalyst }: { components: ComponentTemplate[]; modules: WorkflowModuleDefinition[]; onCreate: (component: ComponentTemplate) => void; onCreateModule: (module: WorkflowModuleDefinition) => void; catalysts: CatalystDefinition[]; workflows: WorkflowRecord[]; onCreateCatalyst: (catalyst: CatalystDefinition) => void; onToggleCatalyst: (id: string) => void }) {
   const [selectedId, setSelectedId] = useState(components[0]?.id ?? '')
+  const [selectedModuleId, setSelectedModuleId] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
   const [query, setQuery] = useState('')
   const selected = components.find((item) => item.id === selectedId) ?? components[0]
+  const selectedModule = modules.find((item) => item.id === selectedModuleId)
   const visibleComponents = components.filter((component) => `${component.name} ${component.description} ${component.kind}`.toLowerCase().includes(query.toLowerCase()))
   const [draft, setDraft] = useState({ name: '', description: '', kind: 'agent' as ComponentKind, icon: 'wand', color: 'mint', instruction: '', inputs: '', outputs: '' })
+  const [instruction, setInstruction] = useState(selected?.instruction ?? '')
+  const [moduleDraft, setModuleDraft] = useState({ name: '', description: '', inputs: '', outputs: '' })
+
+  useEffect(() => { setInstruction(selected?.instruction ?? '') }, [selected?.id, selected?.instruction])
+  useEffect(() => { setModuleDraft({ name: selectedModule?.name ?? '', description: selectedModule?.description ?? '', inputs: selectedModule?.inputs.join(', ') ?? '', outputs: selectedModule?.outputs.join(', ') ?? '' }) }, [selectedModule?.id, selectedModule?.name, selectedModule?.description, selectedModule?.inputs, selectedModule?.outputs])
 
   const create = () => {
     if (!draft.name.trim() || !draft.instruction.trim()) return
     const id = draft.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
     onCreate({ id, name: draft.name, description: draft.description || 'Custom workspace component.', kind: draft.kind, icon: draft.icon, color: draft.color, version: '0.1.0', tags: ['custom'], inputs: draft.inputs.split(',').map((value) => value.trim()).filter(Boolean), outputs: draft.outputs.split(',').map((value) => value.trim()).filter(Boolean), instruction: draft.instruction })
     setSelectedId(id)
+    setSelectedModuleId(null)
     setCreating(false)
     setDraft({ name: '', description: '', kind: 'agent', icon: 'wand', color: 'mint', instruction: '', inputs: '', outputs: '' })
   }
 
-  return <div className="page-wrap"><PageHeading eyebrow="Instruction library" title="Components & modules" description="Atomic components do one job. Modules preserve a reusable graph of components, routes, loops, and handoffs." action={<button className="primary-cta" onClick={() => setCreating(true)}><Plus size={16} /> New component</button>} />
-    <section className="module-catalog-section">
-      <div className="surface-heading"><div><span className="eyebrow">Reusable compositions</span><h2>Modules</h2><p>Drop one linked module into a workflow, or expand it into editable components in the builder.</p></div><span className="module-count">{modules.length} available</span></div>
-      <div className="module-catalog-grid">{modules.map((module) => <article className="surface module-catalog-card" key={module.id}><span className={`module-card-icon tone-${module.color}`}><Layers3 size={17} /></span><div><div className="module-card-heading"><strong>{module.name}</strong><span>{module.source === 'built-in' ? 'Relay' : 'Yours'}</span></div><p>{module.description}</p><div className="module-card-contract"><span>{module.nodes.length} components</span><i /><span>{module.inputs.length} inputs</span><i /><span>{module.outputs.length} outputs</span></div></div></article>)}</div>
+  const customize = () => {
+    if (!selected) return
+    const customized = { ...selected, id: `${selected.id}-custom`, name: `${selected.name} custom`, version: '0.1.0', tags: [...selected.tags, 'custom'], instruction }
+    onCreate(customized)
+    setSelectedId(customized.id)
+    setSelectedModuleId(null)
+  }
+  const saveComponent = () => {
+    if (!selected) return
+    onCreate({ ...selected, instruction })
+  }
+  const customizeModule = () => {
+    if (!selectedModule) return
+    const customized = { ...selectedModule, id: `${selectedModule.id}-custom`, name: `${selectedModule.name} custom`, version: '0.1.0', source: 'user' as const, tags: [...selectedModule.tags, 'custom'], createdAt: new Date().toISOString() }
+    onCreateModule(customized)
+    setSelectedModuleId(customized.id)
+  }
+  const saveModule = () => {
+    if (!selectedModule) return
+    onCreateModule({ ...selectedModule, name: moduleDraft.name.trim() || selectedModule.name, description: moduleDraft.description.trim() || selectedModule.description, inputs: moduleDraft.inputs.split(',').map((value) => value.trim()).filter(Boolean), outputs: moduleDraft.outputs.split(',').map((value) => value.trim()).filter(Boolean) })
+  }
+  const revealEditor = () => window.requestAnimationFrame(() => document.getElementById('asset-editor')?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+  const openComponent = (id: string) => { setSelectedId(id); setSelectedModuleId(null); setCreating(false); revealEditor() }
+  const openModule = (id: string) => { setSelectedModuleId(id); setCreating(false); revealEditor() }
+
+  return <div className="page-wrap"><PageHeading eyebrow="Building blocks" title="Components, modules & catalysts" description="Components do one job. Modules package a reusable graph. Catalysts are secure platform entrypoints." action={<button className="primary-cta" onClick={() => { setCreating(true); setSelectedModuleId(null) }}><Plus size={16} /> New component</button>} />
+    <section className="asset-catalog-section">
+      <div className="surface-heading"><div><span className="eyebrow">Atomic instructions</span><h2>Components</h2><p>Select a component to inspect its contract or create an editable local version.</p></div><span className="module-count">{components.length} available</span></div>
+      <label className="wide-search asset-search"><Search size={14} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search components" /></label>
+      <div className="component-catalog-grid">{visibleComponents.map((component) => <button className={`surface component-catalog-card tone-${component.color} ${selected?.id === component.id && !selectedModule ? 'selected' : ''}`} key={component.id} onClick={() => openComponent(component.id)}><span className={`component-kind-dot tone-${component.color}`}><ComponentIcon icon={component.icon} /></span><div><div className="module-card-heading"><strong>{component.name}</strong><span>{component.tags.includes('custom') ? 'Yours' : 'Relay'}</span></div><p>{component.description}</p><div className="module-card-contract"><span>{component.kind}</span><i /><span>{component.inputs.length} in</span><i /><span>{component.outputs.length} out</span></div></div><ChevronRight size={15} /></button>)}</div>
     </section>
-    <div className="component-manager surface">
-      <div className="component-list-pane"><label className="wide-search"><Search size={14} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search components" /></label>{visibleComponents.map((component) => <button key={component.id} className={selected?.id === component.id ? 'active' : ''} onClick={() => { setSelectedId(component.id); setCreating(false) }}><span className={`component-kind-dot tone-${component.color}`}><ComponentIcon icon={component.icon} /></span><div><strong>{component.name}</strong><small>{component.kind} · v{component.version}</small></div><ChevronRight size={14} /></button>)}</div>
+    <section className="module-catalog-section">
+      <div className="surface-heading"><div><span className="eyebrow">Reusable compositions</span><h2>Modules</h2><p>Linked compositions with a visible internal shape. Select one to inspect its public contract and contained work.</p></div><span className="module-count">{modules.length} available</span></div>
+      <div className="module-catalog-grid">{modules.map((module) => <button className={`surface module-catalog-card tone-${module.color} ${selectedModule?.id === module.id ? 'selected' : ''}`} key={module.id} onClick={() => openModule(module.id)}><span className={`module-card-icon tone-${module.color}`}><Layers3 size={16} /></span><div><div className="module-card-heading"><strong>{module.name}</strong><span>{module.source === 'built-in' ? 'Relay' : 'Yours'}</span></div><p>{module.description}</p><div className="module-composition" aria-label={`${module.nodes.length} components in ${module.name}`}>{module.nodes.slice(0, 5).map((node, index) => <i key={node.id} style={{ '--module-index': index } as React.CSSProperties} />)}</div><div className="module-card-contract"><span>{module.nodes.length} components</span><i /><span>{module.inputs.length} in</span><i /><span>{module.outputs.length} out</span></div></div><ChevronRight size={15} /></button>)}</div>
+    </section>
+    <div className="component-manager surface" id="asset-editor">
       <div className="component-editor-pane">
         {creating ? <>
           <div className="component-create-heading"><div><span className="eyebrow">New reusable instruction</span><h2>Create a component</h2><p>Give the agent one clear job. You can specialize it per workflow later.</p></div><button className="icon-button" onClick={() => setCreating(false)} aria-label="Close component creator"><X size={17} /></button></div>
@@ -361,19 +399,22 @@ function ComponentsPage({ components, modules, onCreate }: { components: Compone
             </aside>
           </div>
           <div className="editor-actions component-create-actions"><span>{!draft.name.trim() || !draft.instruction.trim() ? 'Name and instructions are required' : `Will create components/${draft.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.md`}</span><button className="secondary-cta" onClick={() => setCreating(false)}>Cancel</button><button className="primary-cta" onClick={create} disabled={!draft.name.trim() || !draft.instruction.trim()}>Create component</button></div>
+        </> : selectedModule ? <>
+          <div className="editor-title"><div><span className="eyebrow">Reusable module</span><h2>{selectedModule.name}</h2></div><span className="status-chip ready">v{selectedModule.version}</span></div>
+          {selectedModule.source === 'user' ? <div className="editor-form module-contract-editor"><label><span>Module name</span><input value={moduleDraft.name} onChange={(event) => setModuleDraft({ ...moduleDraft, name: event.target.value })} /></label><label><span>Description</span><input value={moduleDraft.description} onChange={(event) => setModuleDraft({ ...moduleDraft, description: event.target.value })} /></label><div className="two-column"><label><span>Inputs, comma separated</span><input value={moduleDraft.inputs} onChange={(event) => setModuleDraft({ ...moduleDraft, inputs: event.target.value })} /></label><label><span>Outputs, comma separated</span><input value={moduleDraft.outputs} onChange={(event) => setModuleDraft({ ...moduleDraft, outputs: event.target.value })} /></label></div></div> : <p className="editor-description">{selectedModule.description}</p>}
+          <div className="contract-grid"><div><span>Contains</span><strong>{selectedModule.nodes.length} components</strong></div><div><span>Inputs</span><strong>{selectedModule.inputs.length || 'None'}</strong></div><div><span>Outputs</span><strong>{selectedModule.outputs.length || 'None'}</strong></div></div>
+          <div className="module-editor-graph">{selectedModule.nodes.map((node, index) => <div key={node.id}><em>{index + 1}</em><strong>{node.componentId.replaceAll('-', ' ')}</strong>{index < selectedModule.nodes.length - 1 && <span />}</div>)}</div>
+          <div className="source-footer"><div className="source-path"><Layers3 size={14} /> modules/{selectedModule.id}.json</div><span className="module-edit-note">Add it to a workspace, then use <strong>Expand module</strong> to edit its components and transitions.</span>{selectedModule.source === 'user' ? <button className="primary-cta" onClick={saveModule}>Save contract</button> : <button className="secondary-cta" onClick={customizeModule}>Customize a copy</button>}</div>
         </> : selected ? <>
           <div className="editor-title"><div><span className="eyebrow">Reusable component</span><h2>{selected.name}</h2></div><span className="status-chip ready">v{selected.version}</span></div>
           <p className="editor-description">{selected.description}</p>
           <div className="contract-grid"><div><span>Role</span><strong>{selected.kind}</strong></div><div><span>Inputs</span><strong>{selected.inputs.length || 'None'}</strong></div><div><span>Outputs</span><strong>{selected.outputs.length || 'None'}</strong></div></div>
-          <div className="editor-form"><label><span>Markdown instructions</span><textarea className="source-editor" rows={18} value={selected.instruction} readOnly /></label></div>
-          <div className="source-footer"><div className="source-path"><FileCode2 size={14} /> components/{selected.id}.md</div><button className="secondary-cta" onClick={() => {
-            const customized = { ...selected, id: `${selected.id}-custom`, name: `${selected.name} custom`, version: '0.1.0', tags: [...selected.tags, 'custom'] }
-            onCreate(customized)
-            setSelectedId(customized.id)
-          }}>Customize a copy</button></div>
+          <div className="editor-form"><label><span>Markdown instructions</span><textarea className="source-editor" rows={18} value={instruction} onChange={(event) => setInstruction(event.target.value)} readOnly={!selected.tags.includes('custom')} /></label></div>
+          <div className="source-footer"><div className="source-path"><FileCode2 size={14} /> components/{selected.id}.md</div>{selected.tags.includes('custom') ? <button className="primary-cta" onClick={saveComponent}>Save changes</button> : <button className="secondary-cta" onClick={customize}>Customize a copy</button>}</div>
         </> : null}
       </div>
     </div>
+    <CatalystsPage embedded catalysts={catalysts} workflows={workflows} onCreate={onCreateCatalyst} onToggle={onToggleCatalyst} />
   </div>
 }
 
@@ -544,22 +585,31 @@ const catalystSelector = (kind: CatalystKind, settings: typeof defaultCatalystSe
   return `query:${settings.request}:${settings.scope}`
 }
 
-function CatalystsPage({ catalysts, workflows, onCreate, onToggle }: { catalysts: CatalystDefinition[]; workflows: WorkflowRecord[]; onCreate: (catalyst: CatalystDefinition) => void; onToggle: (id: string) => void }) {
+function CatalystsPage({ catalysts, workflows, onCreate, onToggle, embedded = false }: { catalysts: CatalystDefinition[]; workflows: WorkflowRecord[]; onCreate: (catalyst: CatalystDefinition) => void; onToggle: (id: string) => void; embedded?: boolean }) {
   const catalystWorkflows = workflows.filter((workflow) => workflow.entryMode === 'catalyst')
   const [creating, setCreating] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [draft, setDraft] = useState({ name: '', kind: 'connector-event' as CatalystKind, workflowId: '', settings: { ...defaultCatalystSettings } })
   const kind = catalystKinds[draft.kind]
   const openCreator = () => {
     if (!catalystWorkflows.length) return
-    setDraft((current) => ({ ...current, workflowId: catalystWorkflows.some((workflow) => workflow.id === current.workflowId) ? current.workflowId : catalystWorkflows[0].id }))
+    setEditingId(null)
+    setDraft({ name: '', kind: 'connector-event', workflowId: catalystWorkflows[0].id, settings: { ...defaultCatalystSettings } })
+    setCreating(true)
+  }
+  const openEditor = (catalyst: CatalystDefinition) => {
+    setEditingId(catalyst.id)
+    setDraft({ name: catalyst.name, kind: catalyst.kind, workflowId: catalyst.workflowId, settings: { ...defaultCatalystSettings, ...catalyst.settings } })
     setCreating(true)
   }
   const create = () => {
     const workflow = catalystWorkflows.find((item) => item.id === draft.workflowId)
     if (!workflow || !draft.name.trim()) return
-    const id = draft.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
-    onCreate({ id, name: draft.name.trim(), kind: draft.kind, workflowId: workflow.id, workflowName: workflow.name, selector: catalystSelector(draft.kind, draft.settings), settings: draft.settings, security: kind.security, status: 'awaiting-runner', createdAt: new Date().toISOString() })
+    const existing = catalysts.find((item) => item.id === editingId)
+    const id = editingId ?? draft.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
+    onCreate({ id, name: draft.name.trim(), kind: draft.kind, workflowId: workflow.id, workflowName: workflow.name, selector: catalystSelector(draft.kind, draft.settings), settings: draft.settings, security: kind.security, status: existing?.status ?? 'awaiting-runner', createdAt: existing?.createdAt ?? new Date().toISOString() })
     setCreating(false)
+    setEditingId(null)
     setDraft({ name: '', kind: 'connector-event', workflowId: '', settings: { ...defaultCatalystSettings } })
   }
 
@@ -579,12 +629,13 @@ function CatalystsPage({ catalysts, workflows, onCreate, onToggle }: { catalysts
     <label><span>Who may request it</span><select value={draft.settings.scope} onChange={(event) => updateSetting('scope', event.target.value)}><option value="workspace">Workspace members</option><option value="service-account">Approved service account</option><option value="runner-token">Runner token holders</option></select></label>
   </div>
 
-  return <div className="page-wrap"><PageHeading eyebrow="Workflow entrypoints" title="Catalysts" description="Define what may start a workflow. Relay verifies the event at the receiver, records its provenance, then creates a normal auditable run." action={<button className="primary-cta" disabled={!catalystWorkflows.length} title={!catalystWorkflows.length ? 'Add and connect a Catalyst component in a workflow first' : undefined} onClick={openCreator}><Plus size={15} /> New catalyst</button>} />
+  const content = <><PageHeading eyebrow="Workflow entrypoints" title="Catalysts" description="Define what may start a workflow. Relay verifies the event at the receiver, records its provenance, then creates a normal auditable run." action={<button className="primary-cta" disabled={!catalystWorkflows.length} title={!catalystWorkflows.length ? 'Add and connect a Catalyst component in a workflow first' : undefined} onClick={openCreator}><Plus size={15} /> New catalyst</button>} />
     {!catalystWorkflows.length && <section className="catalyst-prerequisite"><Zap size={17} /><div><strong>Stage a catalyst workflow first</strong><span>Add the Catalyst component as the first node, connect it to the first executable step, then choose Stage in the builder. Workflows without it remain manual.</span></div></section>}
-    {creating && <section className="surface catalyst-create"><div className="editor-title"><div><span className="eyebrow">Secure entrypoint</span><h2>Configure a catalyst</h2></div><button className="icon-button" onClick={() => setCreating(false)}><X size={16} /></button></div><div className="catalyst-create-grid"><div className="catalyst-kind-grid">{(Object.entries(catalystKinds) as [CatalystKind, typeof kind][]).map(([id, option]) => { const Icon = option.Icon; return <button className={draft.kind === id ? 'selected' : ''} key={id} onClick={() => setDraft({ ...draft, kind: id })}><Icon size={17} /><strong>{option.label}</strong><small>{option.detail}</small></button> })}</div><div className="editor-form catalyst-fields"><label><span>Name</span><input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="PR quality check" /></label><label><span>Catalyst workflow</span><select value={draft.workflowId} onChange={(event) => setDraft({ ...draft, workflowId: event.target.value })}>{catalystWorkflows.map((workflow) => <option value={workflow.id} key={workflow.id}>{workflow.name}</option>)}</select></label>{guidedFields}<div className="catalyst-security"><ShieldCheck size={16} /><div><strong>{kind.security === 'hmac' ? 'HMAC signature required' : kind.security === 'connector-oauth' ? 'Connector authorization required' : 'Runner token required'}</strong><span>Secrets are referenced by name and resolved by the receiver. They are never stored in workflow JSON.</span></div></div><div className="editor-actions"><button className="secondary-cta" onClick={() => setCreating(false)}>Cancel</button><button className="primary-cta" onClick={create} disabled={!draft.name.trim() || !draft.workflowId}>Save catalyst</button></div></div></div></section>}
-    {catalysts.length ? <div className="catalyst-list">{catalysts.map((catalyst) => { const option = catalystKinds[catalyst.kind]; const Icon = option.Icon; return <article className="surface catalyst-card" key={catalyst.id}><span className="catalyst-card-icon"><Icon size={18} /></span><div className="catalyst-card-main"><div><span className="eyebrow">{option.label}</span><h2>{catalyst.name}</h2></div><p>{describeCatalyst(catalyst)}</p><div className="catalyst-route"><span><Zap size={12} /> {catalyst.workflowName}</span><ArrowRight size={12} /><span><ShieldCheck size={12} /> {catalyst.security}</span></div></div><div className="catalyst-card-state"><span className={`status-chip ${catalyst.status === 'paused' ? 'draft' : 'ready'}`}><i /> {catalyst.status === 'paused' ? 'Paused' : 'Awaiting receiver'}</span><button className="secondary-cta" onClick={() => onToggle(catalyst.id)}>{catalyst.status === 'paused' ? 'Enable' : 'Pause'}</button></div></article> })}</div> : <section className="surface catalyst-empty"><span><Webhook size={22} /></span><h2>No catalysts configured</h2><p>Create a signed hook, connector subscription, schedule, or secure query. Nothing listens publicly until a Relay receiver is connected and authorized.</p><button className="secondary-cta" disabled={!catalystWorkflows.length} onClick={openCreator}>Configure first catalyst <ArrowRight size={13} /></button></section>}
+    {creating && <section className="surface catalyst-create"><div className="editor-title"><div><span className="eyebrow">Secure entrypoint</span><h2>{editingId ? 'Edit catalyst' : 'Configure a catalyst'}</h2></div><button className="icon-button" onClick={() => { setCreating(false); setEditingId(null) }}><X size={16} /></button></div><div className="catalyst-create-grid"><div className="catalyst-kind-grid">{(Object.entries(catalystKinds) as [CatalystKind, typeof kind][]).map(([id, option]) => { const Icon = option.Icon; return <button className={draft.kind === id ? 'selected' : ''} key={id} onClick={() => setDraft({ ...draft, kind: id })}><Icon size={17} /><strong>{option.label}</strong><small>{option.detail}</small></button> })}</div><div className="editor-form catalyst-fields"><label><span>Name</span><input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="PR quality check" /></label><label><span>Catalyst workflow</span><select value={draft.workflowId} onChange={(event) => setDraft({ ...draft, workflowId: event.target.value })}>{catalystWorkflows.map((workflow) => <option value={workflow.id} key={workflow.id}>{workflow.name}</option>)}</select></label>{guidedFields}<div className="catalyst-security"><ShieldCheck size={16} /><div><strong>{kind.security === 'hmac' ? 'HMAC signature required' : kind.security === 'connector-oauth' ? 'Connector authorization required' : 'Runner token required'}</strong><span>Secrets are referenced by name and resolved by the receiver. They are never stored in workflow JSON.</span></div></div><div className="editor-actions"><button className="secondary-cta" onClick={() => { setCreating(false); setEditingId(null) }}>Cancel</button><button className="primary-cta" onClick={create} disabled={!draft.name.trim() || !draft.workflowId}>Save catalyst</button></div></div></div></section>}
+    {catalysts.length ? <div className="catalyst-list">{catalysts.map((catalyst) => { const option = catalystKinds[catalyst.kind]; const Icon = option.Icon; return <article className="surface catalyst-card" key={catalyst.id} role="button" tabIndex={0} onClick={() => openEditor(catalyst)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') openEditor(catalyst) }}><span className="catalyst-card-icon"><Icon size={18} /></span><div className="catalyst-card-main"><div><span className="eyebrow">{option.label}</span><h2>{catalyst.name}</h2></div><p>{describeCatalyst(catalyst)}</p><div className="catalyst-route"><span><Zap size={12} /> {catalyst.workflowName}</span><ArrowRight size={12} /><span><ShieldCheck size={12} /> {catalyst.security}</span></div></div><div className="catalyst-card-state"><span className={`status-chip ${catalyst.status === 'paused' ? 'draft' : 'ready'}`}><i /> {catalyst.status === 'paused' ? 'Paused' : 'Awaiting receiver'}</span><button className="secondary-cta" onClick={(event) => { event.stopPropagation(); onToggle(catalyst.id) }}>{catalyst.status === 'paused' ? 'Enable' : 'Pause'}</button></div></article> })}</div> : <section className="surface catalyst-empty"><span><Webhook size={22} /></span><h2>No catalysts configured</h2><p>Create a signed hook, connector subscription, schedule, or secure query. Nothing listens publicly until a Relay receiver is connected and authorized.</p><button className="secondary-cta" disabled={!catalystWorkflows.length} onClick={openCreator}>Configure first catalyst <ArrowRight size={13} /></button></section>}
     <section className="catalyst-boundary"><ShieldCheck size={17} /><div><strong>Receiver boundary</strong><span>The website authors catalyst definitions. A local daemon or hosted Relay receiver performs signature checks, connector authentication, replay protection, rate limits, and idempotency before creating a run.</span></div></section>
-  </div>
+  </>
+  return embedded ? <section className="embedded-catalysts">{content}</section> : <div className="page-wrap">{content}</div>
 }
 
 function RunsPage({ onNavigate, stagedRuns, onUpdateStagedRuns, workflows, board, onUpdateBoard, catalysts }: { onNavigate: (page: AppPage) => void; stagedRuns: PendingRun[]; onUpdateStagedRuns: (runs: PendingRun[]) => void; workflows: WorkflowRecord[]; board: RunMonitorBoard; onUpdateBoard: (board: RunMonitorBoard) => void; catalysts: CatalystDefinition[] }) {

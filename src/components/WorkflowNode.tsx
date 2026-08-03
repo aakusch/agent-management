@@ -63,6 +63,7 @@ export function WorkflowNode({ data, selected }: NodeProps<WorkflowNodeType>) {
         <span className="node-status">{statusIcon}</span>
       </div>
       <p className="node-description">{data.result || data.description}</p>
+      {data.kind === 'module' && <div className="module-node-composition" aria-label="Reusable component composition"><i /><span /><i /><span /><i /><em>linked graph</em></div>}
       <div className="node-meta">
         <span className="node-kind-badge">{kindLabel[data.kind] ?? data.kind}</span>
         {data.tokens && <><i /> <span>{data.tokens}</span></>}
