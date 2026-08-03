@@ -44,16 +44,15 @@ export function WorkflowEdge({
         markerEnd={markerEnd}
         className={`workflow-edge edge-${tone} ${selected ? 'is-selected' : ''}`}
       />
-      {data?.label && (
-        <EdgeLabelRenderer>
-          <div
-            className={`edge-label edge-label-${tone}`}
-            style={{ transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)` }}
-          >
-            {data.label}
-          </div>
-        </EdgeLabelRenderer>
-      )}
+      <EdgeLabelRenderer>
+        <div
+          className={`edge-label edge-label-${tone} ${data?.label ? '' : 'edge-config-handle'} ${selected ? 'is-selected' : ''}`}
+          style={{ transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)` }}
+          aria-hidden="true"
+        >
+          {data?.label ?? '+'}
+        </div>
+      </EdgeLabelRenderer>
     </>
   )
 }

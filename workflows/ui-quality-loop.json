@@ -48,12 +48,12 @@
     }
   ],
   "edges": [
-    { "id": "implement-review", "source": "implement", "target": "review", "type": "workflow", "data": { "tone": "success" } },
-    { "id": "implement-visual", "source": "implement", "target": "visual", "type": "workflow", "data": { "tone": "default" } },
-    { "id": "review-gate", "source": "review", "target": "gate", "type": "workflow", "data": { "tone": "success" } },
-    { "id": "visual-gate", "source": "visual", "target": "gate", "type": "workflow", "data": { "tone": "default" } },
-    { "id": "gate-ship", "source": "gate", "target": "ship", "type": "workflow", "data": { "label": "pass", "condition": "route == ship", "tone": "success" } },
-    { "id": "gate-loop", "source": "gate", "target": "implement", "sourceHandle": "source-bottom", "targetHandle": "target-bottom", "type": "workflow", "data": { "label": "revise", "condition": "route == revise", "tone": "danger", "loop": { "mode": "bounded", "maxIterations": 3, "maxDurationMinutes": 30, "stopOnNoProgress": 2, "onExhausted": "human" } } }
+    { "id": "implement-review", "source": "implement", "target": "review", "type": "workflow", "data": { "tone": "success", "trigger": "always", "payload": { "mode": "all" }, "onBlocked": "wait" } },
+    { "id": "implement-visual", "source": "implement", "target": "visual", "type": "workflow", "data": { "tone": "default", "trigger": "always", "payload": { "mode": "all" }, "onBlocked": "wait" } },
+    { "id": "review-gate", "source": "review", "target": "gate", "type": "workflow", "data": { "tone": "success", "trigger": "always", "payload": { "mode": "all" }, "onBlocked": "wait" } },
+    { "id": "visual-gate", "source": "visual", "target": "gate", "type": "workflow", "data": { "tone": "default", "trigger": "always", "payload": { "mode": "all" }, "onBlocked": "wait" } },
+    { "id": "gate-ship", "source": "gate", "target": "ship", "type": "workflow", "data": { "label": "pass", "trigger": "condition", "condition": "route == ship", "tone": "success", "payload": { "mode": "summary" }, "onBlocked": "wait" } },
+    { "id": "gate-loop", "source": "gate", "target": "implement", "sourceHandle": "source-bottom", "targetHandle": "target-bottom", "type": "workflow", "data": { "label": "revise", "trigger": "condition", "condition": "route == revise", "tone": "danger", "payload": { "mode": "all" }, "onBlocked": "wait", "loop": { "mode": "bounded", "maxIterations": 3, "maxDurationMinutes": 30, "stopOnNoProgress": 2, "onExhausted": "human" } } }
   ],
   "updatedAt": "2026-08-03T00:00:00.000Z"
 }

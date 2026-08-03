@@ -38,7 +38,15 @@ export type WorkflowNode = Node<WorkflowNodeData, 'workflow'>
 export interface WorkflowEdgeData extends Record<string, unknown> {
   label?: string
   tone?: 'default' | 'success' | 'danger' | 'warning'
+  trigger?: 'always' | 'condition' | 'human' | 'delay'
   condition?: string
+  payload?: {
+    mode: 'all' | 'selected' | 'summary' | 'none'
+    include?: string[]
+  }
+  delaySeconds?: number
+  onBlocked?: 'wait' | 'skip' | 'fail'
+  priority?: number
   loop?: {
     mode: 'bounded' | 'until-cancelled'
     maxIterations?: number

@@ -11,6 +11,7 @@ The board is the editor. Markdown files are the source of truth. A workflow conn
 - Draggable, connectable workflow canvas with zoom, pan, minimap, and deletion
 - Nineteen Markdown-backed components in [`components/`](components), including repository mapping, project checks, browser QA, migration review, dependency audit, documentation sync, integration review, and cross-repository impact
 - Parallel review branches, labeled decision routes, and a visible revision loop
+- Selectable transitions with independent triggers, payload routing, delay, blocked behavior, priority, and loop policy
 - Per-node instruction overrides plus project-level variables
 - Local save and portable JSON import/export
 - Dashboard pages for workflows, components, projects, templates, and live runs

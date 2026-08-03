@@ -153,7 +153,10 @@
           "height": 16
         },
         "data": {
-          "tone": "success"
+          "tone": "success",
+          "trigger": "always",
+          "payload": { "mode": "all" },
+          "onBlocked": "wait"
         }
       },
       {
@@ -167,7 +170,10 @@
           "height": 16
         },
         "data": {
-          "tone": "default"
+          "tone": "default",
+          "trigger": "always",
+          "payload": { "mode": "all" },
+          "onBlocked": "wait"
         }
       },
       {
@@ -181,7 +187,10 @@
           "height": 16
         },
         "data": {
-          "tone": "success"
+          "tone": "success",
+          "trigger": "always",
+          "payload": { "mode": "all" },
+          "onBlocked": "wait"
         }
       },
       {
@@ -195,7 +204,10 @@
           "height": 16
         },
         "data": {
-          "tone": "default"
+          "tone": "default",
+          "trigger": "always",
+          "payload": { "mode": "all" },
+          "onBlocked": "wait"
         }
       },
       {
@@ -211,7 +223,10 @@
         "data": {
           "label": "pass",
           "tone": "success",
-          "condition": "route == ship"
+          "trigger": "condition",
+          "condition": "route == ship",
+          "payload": { "mode": "summary" },
+          "onBlocked": "wait"
         }
       },
       {
@@ -229,7 +244,10 @@
         "data": {
           "label": "revise",
           "tone": "danger",
+          "trigger": "condition",
           "condition": "route == revise",
+          "payload": { "mode": "all" },
+          "onBlocked": "wait",
           "loop": {
             "mode": "bounded",
             "maxIterations": 3,

@@ -64,8 +64,21 @@
             "type": "object",
             "properties": {
               "label": { "type": "string" },
+              "trigger": { "enum": ["always", "condition", "human", "delay"] },
               "condition": { "type": "string" },
               "tone": { "enum": ["default", "success", "danger", "warning"] },
+              "payload": {
+                "type": "object",
+                "required": ["mode"],
+                "properties": {
+                  "mode": { "enum": ["all", "selected", "summary", "none"] },
+                  "include": { "type": "array", "items": { "type": "string" }, "uniqueItems": true }
+                },
+                "additionalProperties": false
+              },
+              "delaySeconds": { "type": "integer", "minimum": 0 },
+              "onBlocked": { "enum": ["wait", "skip", "fail"] },
+              "priority": { "type": "integer", "minimum": 0 },
               "loop": {
                 "type": "object",
                 "required": ["mode", "onExhausted"],

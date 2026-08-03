@@ -35,6 +35,7 @@ import { Inspector } from './components/Inspector'
 import { Library } from './components/Library'
 import { Management, type AppPage } from './components/Management'
 import { StartRunModal, type RunConfiguration } from './components/StartRunModal'
+import { TransitionInspector } from './components/TransitionInspector'
 import { WorkflowEdge } from './components/WorkflowEdge'
 import { WorkflowNode } from './components/WorkflowNode'
 import { componentById, componentLibrary } from './data/library'
@@ -121,18 +122,21 @@ const edge = (
 })
 
 const initialEdges: WorkflowEdgeType[] = [
-  edge('implement-review', 'implement', 'review', { data: { tone: 'success' } }),
-  edge('implement-visual', 'implement', 'visual', { data: { tone: 'default' } }),
-  edge('review-gate', 'review', 'gate', { data: { tone: 'success' } }),
-  edge('visual-gate', 'visual', 'gate', { data: { tone: 'default' } }),
-  edge('gate-ship', 'gate', 'ship', { data: { label: 'pass', tone: 'success', condition: 'route == ship' } }),
+  edge('implement-review', 'implement', 'review', { data: { tone: 'success', trigger: 'always', payload: { mode: 'all' }, onBlocked: 'wait' } }),
+  edge('implement-visual', 'implement', 'visual', { data: { tone: 'default', trigger: 'always', payload: { mode: 'all' }, onBlocked: 'wait' } }),
+  edge('review-gate', 'review', 'gate', { data: { tone: 'success', trigger: 'always', payload: { mode: 'all' }, onBlocked: 'wait' } }),
+  edge('visual-gate', 'visual', 'gate', { data: { tone: 'default', trigger: 'always', payload: { mode: 'all' }, onBlocked: 'wait' } }),
+  edge('gate-ship', 'gate', 'ship', { data: { label: 'pass', tone: 'success', trigger: 'condition', condition: 'route == ship', payload: { mode: 'summary' }, onBlocked: 'wait' } }),
   edge('gate-loop', 'gate', 'implement', {
     sourceHandle: 'source-bottom',
     targetHandle: 'target-bottom',
     data: {
       label: 'revise',
       tone: 'danger',
+      trigger: 'condition',
       condition: 'route == revise',
+      payload: { mode: 'all' },
+      onBlocked: 'wait',
       loop: { mode: 'bounded', maxIterations: 3, maxDurationMinutes: 30, stopOnNoProgress: 2, onExhausted: 'human' },
     },
   }),
@@ -157,6 +161,7 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
   const [workflowName, setWorkflowName] = useState('Implementation quality loop')
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
+  const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
   const [libraryOpen, setLibraryOpen] = useState(true)
   const [startRunOpen, setStartRunOpen] = useState(false)
   const [kickoffTask, setKickoffTask] = useState('')
@@ -169,6 +174,18 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
   const selectedNode = useMemo(
     () => nodes.find((node) => node.id === selectedNodeId) ?? null,
     [nodes, selectedNodeId],
+  )
+  const selectedEdge = useMemo(
+    () => edges.find((item) => item.id === selectedEdgeId) ?? null,
+    [edges, selectedEdgeId],
+  )
+  const selectedEdgeSource = useMemo(
+    () => nodes.find((node) => node.id === selectedEdge?.source),
+    [nodes, selectedEdge],
+  )
+  const selectedEdgeTarget = useMemo(
+    () => nodes.find((node) => node.id === selectedEdge?.target),
+    [nodes, selectedEdge],
   )
 
   const showToast = useCallback((message: string) => {
@@ -183,11 +200,19 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
     ))
   }, [setNodes])
 
+  const updateEdge = useCallback((id: string, patch: Partial<WorkflowEdgeType['data']>) => {
+    setSaveState('saving')
+    setEdges((current) => current.map((item) =>
+      item.id === id ? { ...item, data: { ...(item.data ?? {}), ...patch } } : item,
+    ))
+  }, [setEdges])
+
   const addComponent = useCallback((template: ComponentTemplate, position?: { x: number; y: number }) => {
     const id = `${template.id}-${Date.now()}`
     const fallback = { x: 260 + Math.random() * 420, y: 180 + Math.random() * 260 }
     setNodes((current) => [...current, nodeFromTemplate(template, id, position ?? fallback)])
     setSelectedNodeId(id)
+    setSelectedEdgeId(null)
     setSaveState('saving')
   }, [setNodes])
 
@@ -197,7 +222,7 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
       id: `edge-${Date.now()}`,
       type: 'workflow',
       markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16 },
-      data: { tone: 'default' },
+      data: { tone: 'default', trigger: 'always', payload: { mode: 'all' }, onBlocked: 'wait' },
     }, current))
     setSaveState('saving')
   }, [setEdges])
@@ -403,8 +428,9 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
             onNodesChange={(changes) => { onNodesChange(changes); setSaveState('saving') }}
             onEdgesChange={(changes) => { onEdgesChange(changes); setSaveState('saving') }}
             onConnect={onConnect}
-            onNodeClick={(_, node) => setSelectedNodeId(node.id)}
-            onPaneClick={() => setSelectedNodeId(null)}
+            onNodeClick={(_, node) => { setSelectedNodeId(node.id); setSelectedEdgeId(null) }}
+            onEdgeClick={(_, selected) => { setSelectedEdgeId(selected.id); setSelectedNodeId(null) }}
+            onPaneClick={() => { setSelectedNodeId(null); setSelectedEdgeId(null) }}
             onDrop={onDrop}
             onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'copy' }}
             fitView
@@ -435,6 +461,14 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
           onClose={() => setSelectedNodeId(null)}
           onUpdateNode={updateNode}
           onUpdateProject={(nextProject) => { onUpdateProject(nextProject); setSaveState('saving') }}
+        />
+        <TransitionInspector
+          edge={selectedEdge}
+          sourceNode={selectedEdgeSource}
+          targetNode={selectedEdgeTarget}
+          sourceOutputs={selectedEdgeSource ? componentLookup[selectedEdgeSource.data.templateId]?.outputs ?? [] : []}
+          onClose={() => setSelectedEdgeId(null)}
+          onUpdateEdge={updateEdge}
         />
       </div>
       {startRunOpen && <StartRunModal workflowName={workflowName} projectName={project.name} onClose={() => setStartRunOpen(false)} onStart={(configuration) => { setStartRunOpen(false); void runWorkflow(configuration) }} />}

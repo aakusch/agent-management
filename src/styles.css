@@ -377,10 +377,12 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
   background: #101419;
   font-size: 9px;
   line-height: 1;
-  pointer-events: all;
+  pointer-events: none;
   text-transform: uppercase;
   letter-spacing: .05em;
 }
+.edge-config-handle { width: 22px; height: 22px; padding: 0; display: grid; place-items: center; color: #76818c; border-color: #343c45; background: #11161b; font-size: 15px; font-weight: 350; text-transform: none; }
+.edge-config-handle.is-selected { color: #8de0b3; border-color: rgba(98, 215, 155, .5); background: #122019; box-shadow: 0 0 0 3px rgba(98, 215, 155, .06); }
 .edge-label-success { color: #78cfa1; border-color: rgba(98, 215, 155, .28); }
 .edge-label-danger { color: #e2737e; border-color: rgba(242, 90, 106, .3); }
 
@@ -393,7 +395,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
 .form-section h3 { margin: 0 0 13px; display: flex; align-items: center; gap: 7px; color: #8f98a4; font-size: 10px; text-transform: uppercase; letter-spacing: .075em; }
 .form-section label { display: block; margin: 0 0 12px; }
 .form-section label > span { display: block; margin-bottom: 6px; color: #7d8692; font-size: 10px; }
-.form-section input, .form-section textarea {
+.form-section input, .form-section textarea, .form-section select {
   width: 100%;
   border: 1px solid #272e36;
   border-radius: 7px;
@@ -405,7 +407,12 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
   font-size: 11px;
   line-height: 1.5;
 }
-.form-section input:focus, .form-section textarea:focus { border-color: #46625a; }
+.form-section select { height: 35px; resize: none; }
+.form-section input:focus, .form-section textarea:focus, .form-section select:focus { border-color: #46625a; }
+.form-section label > span em { float: right; color: #515b66; font-size: 8px; font-style: normal; text-transform: uppercase; letter-spacing: .04em; }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+.form-row label { min-width: 0; }
+.mono-input { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .form-section .instruction-editor { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: #a9b1bc; font-size: 10px; }
 .form-hint { margin: -3px 0 0; color: #59636f; font-size: 9px; line-height: 1.5; }
 .form-hint code { color: #83988e; }
@@ -415,6 +422,25 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
 .source-panel { height: 100%; }
 .source-file-heading { display: flex; align-items: center; gap: 7px; margin-bottom: 12px; color: #a2abb5; font-size: 11px; }
 .source-panel pre { margin: 0 0 12px; padding: 12px; min-height: 520px; overflow: auto; white-space: pre-wrap; color: #aab4bf; border: 1px solid #262d35; border-radius: 8px; background: #0a0d11; font: 10px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.transition-inspector { width: 350px; }
+.transition-inspector .inspector-heading h2 { max-width: 275px; overflow: hidden; color: #dce2e8; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.transition-inspector .inspector-heading h2 span { margin: 0 3px; color: #596570; }
+.transition-note { margin: 0 12px 10px; padding: 9px 10px; display: flex; align-items: flex-start; gap: 8px; color: #718079; border: 1px solid rgba(98, 215, 155, .14); border-radius: 7px; background: rgba(98, 215, 155, .035); font-size: 9px; line-height: 1.45; }
+.transition-note svg { flex: 0 0 auto; margin-top: 1px; color: #69b88d; }
+.payload-options { margin: -2px 0 12px; padding: 10px; display: grid; gap: 8px; border: 1px solid #242c34; border-radius: 7px; background: #0d1116; }
+.payload-options > span { margin-bottom: 2px; color: #697480; font-size: 9px; text-transform: uppercase; letter-spacing: .05em; }
+.payload-options label { margin: 0; display: flex; align-items: center; gap: 8px; color: #9ca6b0; cursor: pointer; }
+.payload-options input { width: 13px; height: 13px; margin: 0; accent-color: var(--mint); }
+.payload-options code { color: #9fb8ad; font-size: 9px; }
+.section-toggle { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.section-toggle h3 { margin-bottom: 4px; }
+.section-toggle p { margin: 0 0 13px; color: #59636f; font-size: 9px; line-height: 1.4; }
+.mini-toggle { min-width: 49px; height: 25px; padding: 0 7px; display: flex; align-items: center; justify-content: center; gap: 5px; color: #717c87; border: 1px solid #2a323b; border-radius: 99px; background: #10151a; font-size: 8px; cursor: pointer; }
+.mini-toggle i { width: 6px; height: 6px; border-radius: 50%; background: #59636e; }
+.mini-toggle.on { color: #7fd3a5; border-color: rgba(98, 215, 155, .3); background: rgba(98, 215, 155, .06); }
+.mini-toggle.on i { background: var(--mint); box-shadow: 0 0 7px rgba(98, 215, 155, .5); }
+.loop-fields { margin-top: 3px; padding-top: 13px; border-top: 1px solid var(--line-soft); }
+.transition-inspector .form-hint svg { margin-right: 4px; vertical-align: -2px; }
 
 /* Management surfaces */
 .management-shell { min-width: 960px; }
@@ -599,6 +625,13 @@ html[data-theme="light"] .editor-form input,
 html[data-theme="light"] .editor-form textarea,
 html[data-theme="light"] .editor-form select,
 html[data-theme="light"] .variable-row input { color: #394650; border-color: #d3dadd; background: #f6f8f8; }
+html[data-theme="light"] .form-section input,
+html[data-theme="light"] .form-section textarea,
+html[data-theme="light"] .form-section select,
+html[data-theme="light"] .payload-options { color: #394650; border-color: #d3dadd; background: #f6f8f8; }
+html[data-theme="light"] .transition-inspector .inspector-heading h2 { color: #26313a; }
+html[data-theme="light"] .transition-note { color: #557063; border-color: #d3e2da; background: #f0f6f3; }
+html[data-theme="light"] .mini-toggle { border-color: #d0d8dc; background: #f4f6f7; }
 html[data-theme="light"] .component-list-pane { border-color: #d8dde1; }
 html[data-theme="light"] .editor-title h2 { color: #26313a; }
 html[data-theme="light"] .contract-grid div,
@@ -612,6 +645,8 @@ html[data-theme="light"] .workflow-node { color: #25313a; border-color: #cbd3d8;
 html[data-theme="light"] .node-title { color: #243039; }
 html[data-theme="light"] .node-description { color: #68747e; }
 html[data-theme="light"] .node-handle { border-color: #f7f9f9 !important; }
+html[data-theme="light"] .edge-label { background: #fafbfb; }
+html[data-theme="light"] .edge-config-handle { color: #65717b; border-color: #cbd3d8; background: #f8fafa; }
 html[data-theme="light"] .canvas-toolbar { border-color: #ccd4d9; background: rgba(250, 251, 251, .92); box-shadow: 0 12px 28px rgba(45, 57, 66, .08); }
 html[data-theme="light"] .workflow-name input { color: #25313a; }
 html[data-theme="light"] .react-flow__controls-button { color: #5e6a74 !important; border-color: #d1d8dc !important; background: #fafbfb !important; }

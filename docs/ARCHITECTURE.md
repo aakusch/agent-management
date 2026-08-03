@@ -41,6 +41,15 @@ Instructions may reference variables with `{{path.to.value}}`. Compilation resol
 
 The saved workflow contains project bindings, node positions, component references/overrides, and conditional edges. View data can travel with the workflow without affecting execution semantics.
 
+Edges are first-class transitions. Their routing trigger, condition, priority, delay, blocked behavior, payload selection, and loop policy belong to the workflow connection—not to either reusable component. This lets the same review component receive full artifacts in one workflow, a summary in another, and wait for human approval in a third without forking its Markdown source.
+
+The transition boundary is intentional:
+
+- Components declare capabilities, instructions, and input/output contracts.
+- Node instances declare project-specific overrides.
+- Transitions declare when execution moves and which outputs cross that boundary.
+- Run configuration declares temporary operator policy for one invocation.
+
 See [`workflow.schema.json`](workflow.schema.json) and the example in [`../workflows/ui-quality-loop.json`](../workflows/ui-quality-loop.json).
 
 ### Assignment bundle
