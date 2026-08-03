@@ -313,6 +313,14 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .catalyst-entry-note div { display: flex; flex-direction: column; gap: 4px; }
 .catalyst-entry-note strong { color: #c39a68; font-size: 9px; }
 .catalyst-entry-note p { margin: 0; color: #786a58; font-size: 8px; line-height: 1.5; }
+.platform-entry-inspector .inspector-scroll { padding-top: 12px; }
+.platform-entry-details { padding: 0; overflow: hidden; }
+.platform-entry-details > div { min-height: 50px; padding: 10px 12px; display: flex; flex-direction: column; justify-content: center; gap: 4px; border-bottom: 1px solid #222a32; }
+.platform-entry-details > div:last-child { border-bottom: 0; }
+.platform-entry-details span { color: #5f6a75; font-size: 7px; text-transform: uppercase; letter-spacing: .055em; }
+.platform-entry-details strong { color: #aeb7c0; font-size: 9px; font-weight: 560; }
+.platform-entry-hint { margin: 0; padding: 0 2px; color: #606b76; font-size: 8px; line-height: 1.55; }
+.platform-entry-hint strong { color: #b68b57; }
 
 .workflow-node {
   position: relative;
@@ -1013,6 +1021,10 @@ html[data-theme="light"] .catalyst-entry-note strong,
 html[data-theme="light"] .catalyst-prerequisite strong { color: #805c2d; }
 html[data-theme="light"] .catalyst-entry-note p,
 html[data-theme="light"] .catalyst-prerequisite span { color: #806b50; }
+html[data-theme="light"] .platform-entry-details > div { border-color: #e0e5e7; }
+html[data-theme="light"] .platform-entry-details strong { color: #4d5a64; }
+html[data-theme="light"] .platform-entry-hint { color: #74808a; }
+html[data-theme="light"] .platform-entry-hint strong { color: #805c2d; }
 html[data-theme="light"] .run-board-heading input { color: #1f2b34; }
 html[data-theme="light"] .board-summary span,
 html[data-theme="light"] .run-board-toolbar,

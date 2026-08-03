@@ -39,6 +39,20 @@ export const componentLibrary = Object.values(markdownFiles)
   .map(parseComponent)
   .sort((a, b) => a.name.localeCompare(b.name))
 
+export const platformComponents: ComponentTemplate[] = [{
+  id: 'catalyst',
+  name: 'Catalyst',
+  description: 'Begin from a verified hook, connector event, schedule, or secure query.',
+  kind: 'catalyst',
+  icon: 'zap',
+  color: 'amber',
+  version: 'platform',
+  tags: ['entrypoint', 'trigger', 'webhook', 'schedule'],
+  inputs: ['verified event'],
+  outputs: ['validated payload', 'provenance'],
+  instruction: '',
+}]
+
 export const componentById = Object.fromEntries(
   componentLibrary.map((component) => [component.id, component]),
 )

@@ -2,7 +2,7 @@
 
 **Relay** is a visual, file-first workspace for composing reusable agent instructions into auditable workflows.
 
-The board is the editor. Markdown files are the source of truth. A workflow connects agents, judges, tools, decision gates, and human approvals; project bindings customize those components without forking their shared instructions.
+The board is the editor. Markdown files are the source of truth for executable components. A workflow connects agents, judges, tools, decision gates, and human approvals; project bindings customize those components without forking their shared instructions. Platform primitives such as Catalyst entrypoints appear on the same canvas but are configured and operated by Relay rather than prompted as agents.
 
 ![Relay workspace dashboard](docs/relay-dashboard.png)
 
@@ -12,7 +12,7 @@ The board is the editor. Markdown files are the source of truth. A workflow conn
 - Nineteen Markdown-backed components in [`components/`](components), including repository mapping, project checks, browser QA, migration review, dependency audit, documentation sync, integration review, and cross-repository impact
 - Parallel review branches, labeled decision routes, and a visible revision loop
 - Selectable transitions with independent triggers, payload routing, delay, blocked behavior, priority, and loop policy
-- Explicit Catalyst start components for hook-, connector-, schedule-, or query-initiated workflows; graphs without one remain manually started
+- Platform-managed Catalyst start nodes for hook-, connector-, schedule-, or query-initiated workflows; graphs without one remain manually started
 - Per-node instruction overrides plus project-level variables
 - Per-node model, reasoning-effort, and tool overrides with visible inherited values
 - A project configuration surface for directory, branch, runtime defaults, tool allowlists, permissions, and variables

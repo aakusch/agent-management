@@ -40,7 +40,7 @@ import { TransitionInspector } from './components/TransitionInspector'
 import { WorkflowEdge } from './components/WorkflowEdge'
 import { WorkflowNode } from './components/WorkflowNode'
 import { WorkflowToolbar } from './components/WorkflowToolbar'
-import { componentById, componentLibrary } from './data/library'
+import { componentById, componentLibrary, platformComponents } from './data/library'
 import { builtInTemplates } from './data/templates'
 import { isRecord, readStored, removeStored, writeStored } from './lib/storage'
 import { isComponentTemplate, isProjectContext, isWorkflowDocument, parseWorkflowImport } from './lib/validation'
@@ -213,6 +213,10 @@ function nodeFromTemplate(
   }
 }
 
+const normalizeWorkflowNodes = (nodes: WorkflowNodeType[]): WorkflowNodeType[] => nodes.map((node) => node.data.kind === 'catalyst'
+  ? { ...node, data: { ...node.data, instruction: '', overrides: {}, execution: {} } }
+  : node)
+
 const initialNodes: WorkflowNodeType[] = [
   nodeFromTemplate(componentById['implement-ui'], 'implement', { x: 40, y: 245 }, 'Implement the run objective using the connected project instructions.'),
   nodeFromTemplate(componentById['code-review'], 'review', { x: 445, y: 72 }, 'Review correctness, maintainability, and project conventions.'),
@@ -323,7 +327,7 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
   ))
   const restoredDocument = startingDocument?.id === expectedWorkflowId ? startingDocument : null
   const startingGraph = restoredDocument
-    ? { nodes: restoredDocument.nodes, edges: restoredDocument.edges }
+    ? { nodes: normalizeWorkflowNodes(restoredDocument.nodes), edges: restoredDocument.edges }
     : graphFromTemplate(startingTemplate, components)
   const [nodes, setNodes, onNodesChange] = useNodesState(startingGraph.nodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(startingGraph.edges)
@@ -358,7 +362,7 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
       instruction: `Invoke saved workflow ${workflow.id}. The driver must resolve and validate it before execution.`,
       workflowId: workflow.id,
     })), [workflowId, workflows])
-  const authoringComponents = useMemo(() => [...components, ...workflowComponents], [components, workflowComponents])
+  const authoringComponents = useMemo(() => [...platformComponents, ...components, ...workflowComponents], [components, workflowComponents])
   const componentLookup = useMemo(() => Object.fromEntries(authoringComponents.map((item) => [item.id, item])), [authoringComponents])
   const catalystNodes = useMemo(() => nodes.filter((node) => node.data.kind === 'catalyst'), [nodes])
   const hasCatalyst = catalystNodes.length > 0
@@ -463,7 +467,7 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
     description: 'Implement, review in parallel, revise when required, and prepare a handoff.',
     project,
     entry: hasCatalyst ? { mode: 'catalyst', nodeId: catalystNodes[0].id } : { mode: 'manual' },
-    nodes,
+    nodes: normalizeWorkflowNodes(nodes),
     edges,
     updatedAt: new Date().toISOString(),
   }), [catalystNodes, edges, hasCatalyst, nodes, project, workflowId, workflowName])
@@ -481,7 +485,7 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
         createdAt,
       },
       workflow: documentForExport(),
-      components: authoringComponents.filter((component) => usedTemplateIds.has(component.id)),
+      components: authoringComponents.filter((component) => component.kind !== 'catalyst' && usedTemplateIds.has(component.id)),
       driver: {
         protocol: 'relay-driver-v1',
         role: 'Own the workflow state, dispatch configured agents, evaluate deterministic routes, persist every event, and stop only under the declared policy.',
@@ -602,7 +606,7 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
     try {
       if (file.size > 5 * 1024 * 1024) throw new Error('The file is larger than the 5 MB import limit.')
       const { workflow: imported, components: importedComponents } = parseWorkflowImport(await file.text())
-      setNodes(imported.nodes)
+      setNodes(normalizeWorkflowNodes(imported.nodes))
       setEdges(imported.edges)
       onUpdateProject(normalizeProject(imported.project))
       if (importedComponents.length) onImportComponents(importedComponents)

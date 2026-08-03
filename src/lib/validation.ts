@@ -2,6 +2,7 @@ import type { ComponentTemplate, ProjectContext, RelayAssignmentBundle, Workflow
 import { isRecord, isStringArray } from './storage'
 
 const componentKinds = new Set(['agent', 'judge', 'router', 'human', 'tool', 'workflow', 'catalyst'])
+const templateKinds = new Set(['agent', 'judge', 'router', 'human', 'tool', 'workflow'])
 const nodeStatuses = new Set(['idle', 'queued', 'running', 'passed', 'failed'])
 const reasoningEfforts = new Set(['low', 'medium', 'high', 'xhigh'])
 const relayTools = new Set(['filesystem', 'terminal', 'git', 'browser', 'web'])
@@ -41,7 +42,7 @@ export function isComponentTemplate(value: unknown): value is ComponentTemplate 
     && typeof value.name === 'string'
     && typeof value.description === 'string'
     && typeof value.kind === 'string'
-    && componentKinds.has(value.kind)
+    && templateKinds.has(value.kind)
     && typeof value.icon === 'string'
     && typeof value.color === 'string'
     && typeof value.version === 'string'
