@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
   ArrowRight,
@@ -65,12 +65,26 @@ export function RunBoard({ board, workflows, pendingRun, onChange, onOpenBuilder
   const [addingGroup, setAddingGroup] = useState(false)
   const [groupName, setGroupName] = useState('')
   const [draggedId, setDraggedId] = useState<string | null>(null)
+  const [removed, setRemoved] = useState<{ tile: RunMonitorTile; index: number } | null>(null)
+  const undoTimer = useRef<number | null>(null)
   const counts = useMemo(() => ({
     running: board.tiles.filter((tile) => tile.status === 'running').length,
     waiting: board.tiles.filter((tile) => tile.status === 'waiting-runner').length,
     attention: board.tiles.filter((tile) => tile.status === 'blocked').length,
     arranged: board.tiles.length,
   }), [board.tiles])
+
+  useEffect(() => {
+    if (!workflows.some((workflow) => workflow.id === workflowId)) setWorkflowId(workflows[0]?.id ?? '')
+  }, [workflowId, workflows])
+
+  useEffect(() => {
+    if (!board.groups.some((group) => group.id === groupId)) setGroupId(board.groups[0]?.id ?? '')
+  }, [board.groups, groupId])
+
+  useEffect(() => () => {
+    if (undoTimer.current) window.clearTimeout(undoTimer.current)
+  }, [])
 
   const addMonitor = () => {
     const workflow = workflows.find((item) => item.id === workflowId)
@@ -92,7 +106,13 @@ export function RunBoard({ board, workflows, pendingRun, onChange, onOpenBuilder
   const addGroup = () => {
     const name = groupName.trim()
     if (!name) return
-    const id = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || `group-${Date.now()}`
+    const baseId = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'section'
+    let id = baseId
+    let suffix = 2
+    while (board.groups.some((group) => group.id === id)) {
+      id = `${baseId}-${suffix}`
+      suffix += 1
+    }
     onChange({ ...board, groups: [...board.groups, { id, name }] })
     setGroupId(id)
     setGroupName('')
@@ -111,6 +131,37 @@ export function RunBoard({ board, workflows, pendingRun, onChange, onOpenBuilder
     current.splice(from < to ? to - 1 : to, 0, moved)
     onChange({ ...board, tiles: current })
     setDraggedId(null)
+  }
+
+  const moveTileBy = (tileId: string, offset: -1 | 1) => {
+    const tile = board.tiles.find((item) => item.id === tileId)
+    if (!tile) return
+    const siblings = board.tiles.filter((item) => item.groupId === tile.groupId)
+    const siblingIndex = siblings.findIndex((item) => item.id === tileId)
+    const target = siblings[siblingIndex + offset]
+    if (!target) return
+    const current = [...board.tiles]
+    const from = current.findIndex((item) => item.id === tileId)
+    const to = current.findIndex((item) => item.id === target.id)
+    ;[current[from], current[to]] = [current[to], current[from]]
+    onChange({ ...board, tiles: current })
+  }
+
+  const removeTile = (tile: RunMonitorTile) => {
+    if (undoTimer.current) window.clearTimeout(undoTimer.current)
+    const index = board.tiles.findIndex((item) => item.id === tile.id)
+    setRemoved({ tile, index })
+    onChange({ ...board, tiles: board.tiles.filter((item) => item.id !== tile.id) })
+    undoTimer.current = window.setTimeout(() => setRemoved(null), 5000)
+  }
+
+  const undoRemove = () => {
+    if (!removed) return
+    if (undoTimer.current) window.clearTimeout(undoTimer.current)
+    const tiles = [...board.tiles]
+    tiles.splice(Math.min(Math.max(removed.index, 0), tiles.length), 0, removed.tile)
+    onChange({ ...board, tiles })
+    setRemoved(null)
   }
 
   return (
@@ -132,12 +183,13 @@ export function RunBoard({ board, workflows, pendingRun, onChange, onOpenBuilder
       <div className="run-board-toolbar">
         <div className="add-monitor-control">
           <select value={workflowId} onChange={(event) => setWorkflowId(event.target.value)} aria-label="Workflow to monitor">
+            {!workflows.length && <option value="">No saved workflows</option>}
             {workflows.map((workflow) => <option value={workflow.id} key={workflow.id}>{workflow.name}</option>)}
           </select>
           <select value={groupId} onChange={(event) => setGroupId(event.target.value)} aria-label="Monitoring group">
             {board.groups.map((group) => <option value={group.id} key={group.id}>{group.name}</option>)}
           </select>
-          <button className="primary-cta small" onClick={addMonitor} disabled={!workflowId}><Plus size={14} /> Add run view</button>
+          <button className="primary-cta small" onClick={addMonitor} disabled={!workflowId || !groupId}><Plus size={14} /> Add run view</button>
         </div>
         <div className="board-view-controls">
           <button className={board.columns === 1 ? 'active' : ''} onClick={() => onChange({ ...board, columns: 1 })} aria-label="One column"><Rows3 size={15} /></button>
@@ -146,7 +198,7 @@ export function RunBoard({ board, workflows, pendingRun, onChange, onOpenBuilder
         </div>
       </div>
 
-      {addingGroup && <div className="add-group-row"><input autoFocus value={groupName} onChange={(event) => setGroupName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') addGroup() }} placeholder="Section name, e.g. Checkout services" /><button onClick={() => setAddingGroup(false)}>Cancel</button><button className="primary-cta small" onClick={addGroup}>Add section</button></div>}
+      {addingGroup && <div className="add-group-row"><input autoFocus value={groupName} onChange={(event) => setGroupName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') addGroup(); if (event.key === 'Escape') setAddingGroup(false) }} placeholder="Section name, e.g. Checkout services" aria-label="New section name" /><button onClick={() => setAddingGroup(false)}>Cancel</button><button className="primary-cta small" onClick={addGroup} disabled={!groupName.trim()}>Add section</button></div>}
 
       <div className="monitor-groups">
         {board.groups.map((group) => {
@@ -166,16 +218,23 @@ export function RunBoard({ board, workflows, pendingRun, onChange, onOpenBuilder
                       className={`run-monitor-tile status-${tile.status}`}
                       key={tile.id}
                       draggable
+                      tabIndex={0}
+                      aria-label={`${tile.workflowName}. ${copy.label}. Hold Alt and press left or right arrow to reorder.`}
                       onDragStart={() => setDraggedId(tile.id)}
                       onDragOver={(event) => event.preventDefault()}
                       onDrop={() => moveTile(tile.id)}
+                      onKeyDown={(event) => {
+                        if (!event.altKey || (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight')) return
+                        event.preventDefault()
+                        moveTileBy(tile.id, event.key === 'ArrowLeft' ? -1 : 1)
+                      }}
                     >
                       <div className="run-tile-heading">
                         <span className="drag-handle"><GripVertical size={15} /></span>
                         <span className="run-state-icon"><Radio size={15} /></span>
                         <div><h3>{tile.workflowName}</h3><p>{tile.objective || 'No run objective yet.'}</p></div>
                         <span className={`run-status-pill ${tile.status}`}><i /> {copy.label}</span>
-                        <button className="tile-menu" onClick={() => onChange({ ...board, tiles: board.tiles.filter((item) => item.id !== tile.id) })} aria-label={`Remove ${tile.workflowName} from board`}><Trash2 size={14} /></button>
+                        <button className="tile-menu" onClick={() => removeTile(tile)} aria-label={`Remove ${tile.workflowName} from board`}><Trash2 size={14} /></button>
                       </div>
 
                       {(tile.catalyst || tile.parentWorkflow) && <div className="run-provenance">
@@ -187,7 +246,7 @@ export function RunBoard({ board, workflows, pendingRun, onChange, onOpenBuilder
 
                       <div className="run-tile-footer">
                         <div><strong>{copy.label}</strong><span>{copy.detail}</span></div>
-                        {tile.status === 'waiting-runner' ? <code><TerminalSquare size={13} /> relay connect</code> : tile.status === 'not-started' ? <button onClick={onOpenBuilder}>Prepare run <ArrowRight size={13} /></button> : <button>Inspect <ArrowRight size={13} /></button>}
+                        {tile.status === 'waiting-runner' ? <code><TerminalSquare size={13} /> relay connect</code> : tile.status === 'not-started' ? <button onClick={onOpenBuilder}>Prepare run <ArrowRight size={13} /></button> : <span className="runner-detail-note">Runner detail unavailable</span>}
                       </div>
                     </article>
                   )
@@ -199,6 +258,7 @@ export function RunBoard({ board, workflows, pendingRun, onChange, onOpenBuilder
       </div>
 
       {!pendingRun && board.tiles.length === 0 && <div className="monitor-board-onboarding"><AlertTriangle size={15} /><span>The board is ready, but no run has been prepared. Adding a view organizes it only; execution still starts from the workflow builder and connects through the CLI.</span></div>}
+      {removed && <div className="board-undo" role="status" aria-live="polite"><span>Removed <strong>{removed.tile.workflowName}</strong></span><button onClick={undoRemove}>Undo</button></div>}
     </div>
   )
 }

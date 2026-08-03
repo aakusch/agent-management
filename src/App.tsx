@@ -14,6 +14,7 @@ import {
   type Connection,
 } from '@xyflow/react'
 import {
+  AlertCircle,
   Box,
   Check,
   ChevronDown,
@@ -39,6 +40,8 @@ import { WorkflowEdge } from './components/WorkflowEdge'
 import { WorkflowNode } from './components/WorkflowNode'
 import { componentById, componentLibrary } from './data/library'
 import { builtInTemplates } from './data/templates'
+import { isRecord, readStored, removeStored, writeStored } from './lib/storage'
+import { isComponentTemplate, isProjectContext, parseWorkflowImport } from './lib/validation'
 import type {
   ComponentTemplate,
   ProjectContext,
@@ -51,6 +54,84 @@ import type { CatalystDefinition, PendingRun, RunMonitorBoard, WorkflowRecord, W
 
 const nodeTypes = { workflow: WorkflowNode }
 const edgeTypes = { workflow: WorkflowEdge }
+const validPages: AppPage[] = ['dashboard', 'builder', 'workflows', 'components', 'projects', 'templates', 'catalysts', 'runs']
+
+const pageFromHash = () => {
+  const candidate = window.location.hash.replace('#/', '') as AppPage
+  return validPages.includes(candidate) ? candidate : 'dashboard'
+}
+
+const isWorkflowRecordList = (value: unknown): value is WorkflowRecord[] => Array.isArray(value) && value.every((item) =>
+  isRecord(item)
+  && typeof item.id === 'string'
+  && typeof item.name === 'string'
+  && typeof item.description === 'string'
+  && typeof item.nodeCount === 'number'
+  && ['draft', 'ready'].includes(String(item.status))
+  && ['starter', 'local', 'imported'].includes(String(item.source))
+  && (item.steps === undefined || (Array.isArray(item.steps) && item.steps.every((step) => typeof step === 'string'))),
+)
+
+const isWorkflowTemplateList = (value: unknown): value is WorkflowTemplate[] => Array.isArray(value) && value.every((item) =>
+  isRecord(item)
+  && typeof item.id === 'string'
+  && typeof item.name === 'string'
+  && typeof item.description === 'string'
+  && Array.isArray(item.steps)
+  && item.steps.every((step) => typeof step === 'string')
+  && Array.isArray(item.componentIds)
+  && item.componentIds.every((id) => typeof id === 'string')
+  && typeof item.published === 'boolean',
+)
+
+const isPendingRun = (value: unknown): value is PendingRun => isRecord(value)
+  && typeof value.id === 'string'
+  && typeof value.workflowName === 'string'
+  && typeof value.createdAt === 'string'
+  && value.state === 'waiting-for-runner'
+  && isRecord(value.configuration)
+  && typeof value.configuration.task === 'string'
+  && ['guided', 'adaptive', 'autonomous'].includes(String(value.configuration.autonomy))
+  && ['execute', 'dry-run'].includes(String(value.configuration.execution))
+
+const isCatalystList = (value: unknown): value is CatalystDefinition[] => Array.isArray(value) && value.every((item) =>
+  isRecord(item)
+  && typeof item.id === 'string'
+  && typeof item.name === 'string'
+  && typeof item.workflowId === 'string'
+  && ['signed-webhook', 'connector-event', 'cron', 'secure-query'].includes(String(item.kind))
+  && ['awaiting-runner', 'paused'].includes(String(item.status)),
+)
+
+const isMonitorBoard = (value: unknown): value is RunMonitorBoard => {
+  if (!isRecord(value)
+    || typeof value.name !== 'string'
+    || (value.columns !== 1 && value.columns !== 2)
+    || !Array.isArray(value.groups)
+    || !value.groups.length
+    || !Array.isArray(value.tiles)) return false
+  const groupIds = new Set<string>()
+  for (const group of value.groups) {
+    if (!isRecord(group) || typeof group.id !== 'string' || typeof group.name !== 'string' || groupIds.has(group.id)) return false
+    groupIds.add(group.id)
+  }
+  return value.tiles.every((tile) => isRecord(tile)
+    && typeof tile.id === 'string'
+    && typeof tile.groupId === 'string'
+    && groupIds.has(tile.groupId)
+    && typeof tile.workflowName === 'string'
+    && ['not-started', 'waiting-runner', 'running', 'blocked', 'completed'].includes(String(tile.status))
+    && Array.isArray(tile.steps)
+    && tile.steps.every((step) => typeof step === 'string'))
+}
+
+const readTheme = (): 'dark' | 'light' => {
+  try {
+    return window.localStorage.getItem('relay.theme') === 'light' ? 'light' : 'dark'
+  } catch {
+    return 'dark'
+  }
+}
 
 const projectSeed: ProjectContext = {
   name: 'No project selected',
@@ -220,9 +301,11 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
   const [startRunOpen, setStartRunOpen] = useState(false)
   const [kickoffTask, setKickoffTask] = useState('')
   const [saveState, setSaveState] = useState<'saved' | 'saving'>('saved')
-  const [toast, setToast] = useState<string | null>(null)
+  const [toast, setToast] = useState<{ message: string; tone: 'success' | 'error' } | null>(null)
   const [overflowOpen, setOverflowOpen] = useState(false)
   const importInput = useRef<HTMLInputElement>(null)
+  const overflowRef = useRef<HTMLDivElement>(null)
+  const toastTimer = useRef<number | null>(null)
   const { screenToFlowPosition, fitView } = useReactFlow()
   const workflowComponents = useMemo<ComponentTemplate[]>(() => workflows
     .filter((workflow) => workflow.id !== workflowId)
@@ -260,10 +343,31 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
     [nodes, selectedEdge],
   )
 
-  const showToast = useCallback((message: string) => {
-    setToast(message)
-    window.setTimeout(() => setToast(null), 2200)
+  const showToast = useCallback((message: string, tone: 'success' | 'error' = 'success') => {
+    if (toastTimer.current) window.clearTimeout(toastTimer.current)
+    setToast({ message, tone })
+    toastTimer.current = window.setTimeout(() => setToast(null), 3200)
   }, [])
+
+  useEffect(() => () => {
+    if (toastTimer.current) window.clearTimeout(toastTimer.current)
+  }, [])
+
+  useEffect(() => {
+    if (!overflowOpen) return
+    const closeOnOutsidePress = (event: PointerEvent) => {
+      if (!overflowRef.current?.contains(event.target as Node)) setOverflowOpen(false)
+    }
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOverflowOpen(false)
+    }
+    document.addEventListener('pointerdown', closeOnOutsidePress)
+    document.addEventListener('keydown', closeOnEscape)
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutsidePress)
+      document.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [overflowOpen])
 
   const updateNode = useCallback((id: string, patch: Partial<WorkflowNodeType['data']>) => {
     setSaveState('saving')
@@ -357,8 +461,20 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
   }, [authoringComponents, documentForExport, kickoffTask, nodes, workflowName])
 
   const saveWorkflow = useCallback(async () => {
+    if (!workflowName.trim()) {
+      showToast('Add a workflow name before saving.', 'error')
+      return
+    }
+    if (!nodes.length) {
+      showToast('Add at least one component before saving.', 'error')
+      return
+    }
     setSaveState('saving')
-    localStorage.setItem('relay.workflow', JSON.stringify(documentForExport()))
+    if (!writeStored('relay.workflow', documentForExport())) {
+      setSaveState('saved')
+      showToast('Could not save in this browser. Check storage permissions.', 'error')
+      return
+    }
     onWorkflowSaved({
       id: workflowId,
       name: workflowName,
@@ -388,25 +504,19 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
 
   const importWorkflow = useCallback(async (file: File) => {
     try {
-      const parsed = JSON.parse(await file.text()) as WorkflowDocument | RelayAssignmentBundle
-      const bundle = (parsed as RelayAssignmentBundle).kind === 'relay.assignment'
-        ? parsed as RelayAssignmentBundle
-        : null
-      const imported: WorkflowDocument = bundle ? bundle.workflow : parsed as WorkflowDocument
-      if (imported.schemaVersion !== '1.0' || !Array.isArray(imported.nodes) || !Array.isArray(imported.edges)) {
-        throw new Error('Unsupported workflow document')
-      }
+      if (file.size > 5 * 1024 * 1024) throw new Error('The file is larger than the 5 MB import limit.')
+      const { workflow: imported, components: importedComponents } = parseWorkflowImport(await file.text())
       setNodes(imported.nodes)
       setEdges(imported.edges)
       onUpdateProject(imported.project)
-      if (bundle) onImportComponents(bundle.components)
+      if (importedComponents.length) onImportComponents(importedComponents)
       setWorkflowName(imported.name)
       setSelectedNodeId(null)
       setSelectedEdgeId(null)
       window.setTimeout(() => fitView({ padding: 0.16, duration: 500 }), 50)
       showToast('Workflow imported')
-    } catch {
-      showToast('Could not import this workflow')
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Could not import this workflow.', 'error')
     }
   }, [fitView, onImportComponents, onUpdateProject, setEdges, setNodes, showToast])
 
@@ -427,7 +537,7 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
 
   return (
     <main className="app-shell">
-      <header className="topbar">
+      <header className="topbar" inert={startRunOpen || undefined} aria-hidden={startRunOpen || undefined}>
         <button className="brand brand-button" onClick={() => onNavigate('dashboard')}>
           <span className="brand-mark"><Sparkles size={17} /></span>
           <span>Relay</span>
@@ -469,18 +579,18 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
           <button className="icon-button theme-toggle" onClick={onToggleTheme} aria-label={`Use ${theme === 'dark' ? 'light' : 'dark'} theme`}>
             {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
           </button>
-          <div className="overflow-wrap">
+          <div className="overflow-wrap" ref={overflowRef}>
             <button className="icon-button" onClick={() => setOverflowOpen((open) => !open)} aria-label="More workflow actions" aria-expanded={overflowOpen}><MoreHorizontal size={18} /></button>
-            {overflowOpen && <div className="overflow-menu">
-              <button onClick={() => { importInput.current?.click(); setOverflowOpen(false) }}><Import size={15} /><span><strong>Import workflow</strong><small>Open a JSON or Relay assignment</small></span></button>
-              <button onClick={() => { exportWorkflow(); setOverflowOpen(false) }}><Download size={15} /><span><strong>Export assignment</strong><small>Download the driver-ready bundle</small></span></button>
-              <button onClick={() => { onNavigate('runs'); setOverflowOpen(false) }}><Cloud size={15} /><span><strong>View runs</strong><small>Open live and prepared runs</small></span></button>
+            {overflowOpen && <div className="overflow-menu" role="menu">
+              <button role="menuitem" onClick={() => { importInput.current?.click(); setOverflowOpen(false) }}><Import size={15} /><span><strong>Import workflow</strong><small>Open a JSON or Relay assignment</small></span></button>
+              <button role="menuitem" onClick={() => { exportWorkflow(); setOverflowOpen(false) }}><Download size={15} /><span><strong>Export assignment</strong><small>Download the driver-ready bundle</small></span></button>
+              <button role="menuitem" onClick={() => { onNavigate('runs'); setOverflowOpen(false) }}><Cloud size={15} /><span><strong>View runs</strong><small>Open live and prepared runs</small></span></button>
             </div>}
           </div>
         </div>
       </header>
 
-      <div className="workspace-body">
+      <div className="workspace-body" inert={startRunOpen || undefined} aria-hidden={startRunOpen || undefined}>
         {libraryOpen ? (
           <Library components={authoringComponents} onAdd={addComponent} onCollapse={() => setLibraryOpen(false)} onNewComponent={() => onNavigate('components')} />
         ) : (
@@ -542,7 +652,9 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
         />
       </div>
       {startRunOpen && <StartRunModal workflowName={workflowName} projectName={project.name} onClose={() => setStartRunOpen(false)} onStart={(configuration) => { setStartRunOpen(false); void runWorkflow(configuration) }} />}
-      {toast && <div className="toast"><Check size={15} /> {toast}</div>}
+      {toast && <div className={`toast ${toast.tone}`} role="status" aria-live="polite">
+        {toast.tone === 'error' ? <AlertCircle size={15} /> : <Check size={15} />} {toast.message}
+      </div>}
     </main>
   )
 }
@@ -552,49 +664,30 @@ function GitFlowIcon() {
 }
 
 export default function App() {
-  const validPages: AppPage[] = ['dashboard', 'builder', 'workflows', 'components', 'projects', 'templates', 'catalysts', 'runs']
-  const pageFromHash = () => {
-    const candidate = window.location.hash.replace('#/', '') as AppPage
-    return validPages.includes(candidate) ? candidate : 'dashboard'
-  }
   const [page, setPage] = useState<AppPage>(pageFromHash)
-  const [theme, setTheme] = useState<'dark' | 'light'>(() => localStorage.getItem('relay.theme') === 'light' ? 'light' : 'dark')
+  const [theme, setTheme] = useState<'dark' | 'light'>(readTheme)
   const [project, setProject] = useState<ProjectContext>(() => {
-    const saved = localStorage.getItem('relay.project')
-    if (!saved) return projectSeed
-    const parsed = JSON.parse(saved) as ProjectContext
+    const parsed = readStored('relay.project', projectSeed, isProjectContext)
     return parsed.name === 'Acme storefront' && parsed.root === './' ? projectSeed : parsed
   })
-  const [customComponents, setCustomComponents] = useState<ComponentTemplate[]>(() => {
-    const saved = localStorage.getItem('relay.components')
-    return saved ? JSON.parse(saved) as ComponentTemplate[] : []
-  })
-  const [workflows, setWorkflows] = useState<WorkflowRecord[]>(() => {
-    const saved = localStorage.getItem('relay.workflows')
-    return saved ? JSON.parse(saved) as WorkflowRecord[] : [starterWorkflow]
-  })
-  const [userTemplates, setUserTemplates] = useState<WorkflowTemplate[]>(() => {
-    const saved = localStorage.getItem('relay.userTemplates')
-    return saved ? JSON.parse(saved) as WorkflowTemplate[] : []
-  })
+  const [customComponents, setCustomComponents] = useState<ComponentTemplate[]>(() => readStored(
+    'relay.components', [], (value): value is ComponentTemplate[] => Array.isArray(value) && value.every(isComponentTemplate),
+  ))
+  const [workflows, setWorkflows] = useState<WorkflowRecord[]>(() => readStored('relay.workflows', [starterWorkflow], isWorkflowRecordList))
+  const [userTemplates, setUserTemplates] = useState<WorkflowTemplate[]>(() => readStored('relay.userTemplates', [], isWorkflowTemplateList))
   const [builderTemplate, setBuilderTemplate] = useState<WorkflowTemplate | undefined>(undefined)
-  const [pendingRun, setPendingRun] = useState<PendingRun | null>(() => {
-    const saved = localStorage.getItem('relay.pendingRun')
-    return saved ? JSON.parse(saved) as PendingRun : null
-  })
-  const [catalysts, setCatalysts] = useState<CatalystDefinition[]>(() => {
-    const saved = localStorage.getItem('relay.catalysts')
-    return saved ? JSON.parse(saved) as CatalystDefinition[] : []
-  })
+  const [pendingRun, setPendingRun] = useState<PendingRun | null>(() => readStored<PendingRun | null>(
+    'relay.pendingRun', null, (value): value is PendingRun | null => value === null || isPendingRun(value),
+  ))
+  const [catalysts, setCatalysts] = useState<CatalystDefinition[]>(() => readStored('relay.catalysts', [], isCatalystList))
   const [monitorBoard, setMonitorBoard] = useState<RunMonitorBoard>(() => {
-    const saved = localStorage.getItem('relay.monitorBoard')
-    if (saved) return JSON.parse(saved) as RunMonitorBoard
-    return {
+    const fallback: RunMonitorBoard = {
       name: 'Codebase runs',
       columns: 2,
       groups: [{ id: 'workspace', name: 'Workspace', projectName: project.root ? project.name : undefined }],
       tiles: [],
     }
+    return readStored('relay.monitorBoard', fallback, isMonitorBoard)
   })
   const components = useMemo(() => {
     const customIds = new Set(customComponents.map((item) => item.id))
@@ -605,16 +698,16 @@ export default function App() {
     const onHashChange = () => setPage(pageFromHash())
     window.addEventListener('hashchange', onHashChange)
     return () => window.removeEventListener('hashchange', onHashChange)
-  })
-  useEffect(() => localStorage.setItem('relay.project', JSON.stringify(project)), [project])
-  useEffect(() => localStorage.setItem('relay.components', JSON.stringify(customComponents)), [customComponents])
-  useEffect(() => localStorage.setItem('relay.workflows', JSON.stringify(workflows)), [workflows])
-  useEffect(() => localStorage.setItem('relay.userTemplates', JSON.stringify(userTemplates)), [userTemplates])
-  useEffect(() => localStorage.setItem('relay.catalysts', JSON.stringify(catalysts)), [catalysts])
-  useEffect(() => localStorage.setItem('relay.monitorBoard', JSON.stringify(monitorBoard)), [monitorBoard])
+  }, [])
+  useEffect(() => { writeStored('relay.project', project) }, [project])
+  useEffect(() => { writeStored('relay.components', customComponents) }, [customComponents])
+  useEffect(() => { writeStored('relay.workflows', workflows) }, [workflows])
+  useEffect(() => { writeStored('relay.userTemplates', userTemplates) }, [userTemplates])
+  useEffect(() => { writeStored('relay.catalysts', catalysts) }, [catalysts])
+  useEffect(() => { writeStored('relay.monitorBoard', monitorBoard) }, [monitorBoard])
   useEffect(() => {
-    if (pendingRun) localStorage.setItem('relay.pendingRun', JSON.stringify(pendingRun))
-    else localStorage.removeItem('relay.pendingRun')
+    if (pendingRun) writeStored('relay.pendingRun', pendingRun)
+    else removeStored('relay.pendingRun')
   }, [pendingRun])
   useEffect(() => {
     if (!pendingRun) return
@@ -641,7 +734,7 @@ export default function App() {
   }, [pendingRun, workflows])
   useEffect(() => {
     document.documentElement.dataset.theme = theme
-    localStorage.setItem('relay.theme', theme)
+    try { window.localStorage.setItem('relay.theme', theme) } catch { /* Theme still applies for this session. */ }
   }, [theme])
 
   const navigate = (nextPage: AppPage) => {

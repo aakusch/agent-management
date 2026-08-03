@@ -14,13 +14,16 @@ The board is the editor. Markdown files are the source of truth. A workflow conn
 - Selectable transitions with independent triggers, payload routing, delay, blocked behavior, priority, and loop policy
 - Per-node instruction overrides plus project-level variables
 - Local save and portable JSON import/export
+- Defensive browser persistence that recovers from malformed or unavailable local storage
+- Bounded, schema-aware workflow imports that reject duplicate nodes and broken edge references
 - Dashboard pages for workflows, components, projects, templates, and live runs
 - Driver-ready `.relay.json` assignment bundles with embedded Markdown and execution policies
 - Split-view control room for graph state and parallel agent lanes
 - User-arranged multi-run boards with codebase sections, honest connection states, and draggable workflow tiles
 - Catalyst authoring for signed hooks, connector events, runner cron, and secure queries
 - Saved workflows exposed as reusable nested-workflow nodes
-- Task-first run setup with guided, adaptive, and full-autonomous execution modes
+- Task-first run preparation with guided, adaptive, and full-autonomous modes, optional budgets, and explicit CLI handoff
+- Keyboard-safe dialogs, component search, monitor reordering, and recoverable tile removal
 - Persistent dark and light themes
 - Seven built-in workflow templates plus persisted user templates with private/published visibility
 - Template-to-builder handoff that instantiates the selected components and transitions on the canvas
@@ -79,6 +82,8 @@ components/             Reusable Markdown component definitions
 workflows/              Portable saved workflow documents
 src/components/         Canvas, node, edge, library, and inspector UI
 src/data/library.ts     Markdown discovery and frontmatter parsing
+src/lib/storage.ts      Safe local persistence boundary
+src/lib/validation.ts   Runtime workflow and assignment import validation
 src/types/workflow.ts   Typed component and workflow contracts
 docs/PRODUCT.md         Product thesis, primitives, and roadmap
 docs/ARCHITECTURE.md    Execution model and technical boundaries

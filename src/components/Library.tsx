@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Accessibility,
   Bot,
@@ -43,6 +43,7 @@ interface LibraryProps {
 
 export function Library({ components, onAdd, onCollapse, onNewComponent }: LibraryProps) {
   const [query, setQuery] = useState('')
+  const searchRef = useRef<HTMLInputElement>(null)
   const [open, setOpen] = useState<Record<string, boolean>>({
     Agents: true,
     Logic: true,
@@ -65,6 +66,17 @@ export function Library({ components, onAdd, onCollapse, onNewComponent }: Libra
     { label: 'Workflows', items: filtered.filter((item) => item.kind === 'workflow') },
   ]
 
+  useEffect(() => {
+    const focusSearch = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault()
+        searchRef.current?.focus()
+      }
+    }
+    window.addEventListener('keydown', focusSearch)
+    return () => window.removeEventListener('keydown', focusSearch)
+  }, [])
+
   return (
     <aside className="library-panel">
       <div className="library-titlebar">
@@ -79,7 +91,7 @@ export function Library({ components, onAdd, onCollapse, onNewComponent }: Libra
 
       <label className="search-box">
         <Search size={15} />
-        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search components" />
+        <input ref={searchRef} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search components" aria-label="Search components" />
         <kbd>⌘K</kbd>
       </label>
 
@@ -88,12 +100,15 @@ export function Library({ components, onAdd, onCollapse, onNewComponent }: Libra
           <section className="library-section" key={section.label}>
             <button
               className="section-heading"
+              aria-expanded={open[section.label]}
+              aria-controls={`library-section-${section.label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}
               onClick={() => setOpen((current) => ({ ...current, [section.label]: !current[section.label] }))}
             >
               <span>{section.label}</span>
               <ChevronDown className={open[section.label] ? '' : 'collapsed'} size={15} />
             </button>
-            {open[section.label] && section.items.map((component) => {
+            {open[section.label] && <div id={`library-section-${section.label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}>
+              {section.items.map((component) => {
               const Icon = icons[component.icon as keyof typeof icons] ?? Bot
               return (
                 <button
@@ -105,6 +120,7 @@ export function Library({ components, onAdd, onCollapse, onNewComponent }: Libra
                     event.dataTransfer.effectAllowed = 'copy'
                   }}
                   onClick={() => onAdd(component)}
+                  title={`Add ${component.name} to the canvas`}
                 >
                   <span className={`library-icon tone-${component.color}`}><Icon size={16} /></span>
                   <span className="library-copy">
@@ -114,7 +130,8 @@ export function Library({ components, onAdd, onCollapse, onNewComponent }: Libra
                   <Plus className="library-add" size={15} />
                 </button>
               )
-            })}
+              })}
+            </div>}
           </section>
         ))}
         {filtered.length === 0 && <div className="empty-search">No components found.</div>}
