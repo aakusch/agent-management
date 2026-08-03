@@ -14,7 +14,7 @@ Markdown components + workflow JSON
         board / run inspector
 ```
 
-The repository currently implements the authoring layer. The browser stores drafts locally and imports/exports a typed JSON document. It does not execute arbitrary commands.
+The repository currently implements the authoring and observation layers. The browser stores drafts locally, imports/exports a typed assignment bundle, and demonstrates a live control room. It does not execute arbitrary commands.
 
 ## Source formats
 
@@ -42,6 +42,10 @@ Instructions may reference variables with `{{path.to.value}}`. Compilation resol
 The saved workflow contains project bindings, node positions, component references/overrides, and conditional edges. View data can travel with the workflow without affecting execution semantics.
 
 See [`workflow.schema.json`](workflow.schema.json) and the example in [`../workflows/ui-quality-loop.json`](../workflows/ui-quality-loop.json).
+
+### Assignment bundle
+
+The handoff artifact is a self-contained `*.relay.json` file with kind `relay.assignment`. It embeds the workflow, the exact Markdown components it references, and driver policies. See [`assignment.schema.json`](assignment.schema.json), the generated [`../workflows/ui-quality-loop.relay.json`](../workflows/ui-quality-loop.relay.json), and the full [`DRIVER-PROTOCOL.md`](DRIVER-PROTOCOL.md).
 
 ## Proposed runtime
 
@@ -90,6 +94,8 @@ SQLite is sufficient for the local-first milestone:
 - `approvals`
 
 Large artifacts live on disk by content hash; SQLite stores metadata and relationships. A run can be reconstructed entirely from its plan and event stream.
+
+The runner streams the same append-only events to the UI over a loopback Server-Sent Events endpoint. The visual control room is therefore a projection of durable run state, while the CLI driver remains the executor.
 
 ## Safety model
 

@@ -68,10 +68,13 @@
               "tone": { "enum": ["default", "success", "danger", "warning"] },
               "loop": {
                 "type": "object",
-                "required": ["maxIterations", "onExhausted"],
+                "required": ["mode", "onExhausted"],
                 "properties": {
+                  "mode": { "enum": ["bounded", "until-cancelled"] },
                   "maxIterations": { "type": "integer", "minimum": 1 },
-                  "onExhausted": { "type": "string" }
+                  "maxDurationMinutes": { "type": "integer", "minimum": 1 },
+                  "stopOnNoProgress": { "type": "integer", "minimum": 1 },
+                  "onExhausted": { "enum": ["fail", "pause", "human"] }
                 }
               }
             },

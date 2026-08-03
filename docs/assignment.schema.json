@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://relay.local/schemas/assignment.schema.json",
+  "title": "Relay driver assignment",
+  "type": "object",
+  "required": ["kind", "schemaVersion", "assignment", "workflow", "components", "driver"],
+  "properties": {
+    "kind": { "const": "relay.assignment" },
+    "schemaVersion": { "const": "1.0" },
+    "assignment": {
+      "type": "object",
+      "required": ["id", "title", "task", "createdAt"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "title": { "type": "string", "minLength": 1 },
+        "task": { "type": "string", "minLength": 1 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "additionalProperties": false
+    },
+    "workflow": { "$ref": "workflow.schema.json" },
+    "components": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "description", "kind", "version", "inputs", "outputs", "instruction"],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "description": { "type": "string" },
+          "kind": { "enum": ["agent", "judge", "router", "human", "tool"] },
+          "icon": { "type": "string" },
+          "color": { "type": "string" },
+          "version": { "type": "string" },
+          "tags": { "type": "array", "items": { "type": "string" } },
+          "inputs": { "type": "array", "items": { "type": "string" } },
+          "outputs": { "type": "array", "items": { "type": "string" } },
+          "instruction": { "type": "string" },
+          "defaults": { "type": "object", "additionalProperties": { "type": "string" } }
+        },
+        "additionalProperties": false
+      }
+    },
+    "driver": {
+      "type": "object",
+      "required": ["protocol", "role", "concurrency", "stateDirectory", "eventLog", "artifactDirectory", "checkpointAfterEachNode", "stopConditions", "permissions"],
+      "properties": {
+        "protocol": { "const": "relay-driver-v1" },
+        "role": { "type": "string" },
+        "concurrency": { "type": "integer", "minimum": 1 },
+        "stateDirectory": { "type": "string" },
+        "eventLog": { "type": "string" },
+        "artifactDirectory": { "type": "string" },
+        "checkpointAfterEachNode": { "type": "boolean" },
+        "stopConditions": {
+          "type": "object",
+          "required": ["maxTotalSteps", "maxDurationMinutes", "stopOnNoProgress", "requireHumanOnExhaustion"],
+          "properties": {
+            "maxTotalSteps": { "type": "integer", "minimum": 1 },
+            "maxDurationMinutes": { "type": "integer", "minimum": 1 },
+            "maxCostUsd": { "type": "number", "minimum": 0 },
+            "stopOnNoProgress": { "type": "integer", "minimum": 1 },
+            "requireHumanOnExhaustion": { "type": "boolean" }
+          },
+          "additionalProperties": false
+        },
+        "permissions": {
+          "type": "object",
+          "required": ["spawnAgents", "shell", "network", "publish"],
+          "properties": {
+            "spawnAgents": { "type": "boolean" },
+            "shell": { "enum": ["project", "read-only", "none"] },
+            "network": { "enum": ["ask", "allow", "deny"] },
+            "publish": { "enum": ["ask", "allow", "deny"] }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

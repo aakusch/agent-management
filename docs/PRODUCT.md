@@ -61,6 +61,8 @@ A human node pauses rather than polls. It presents a focused decision, relevant 
 
 ## Product surfaces
 
+Relay uses progressive disclosure rather than separate “simple” and “expert” products. Dashboard and templates explain outcomes in ordinary language; the builder exposes graph structure; source, contracts, permissions, and event logs remain one layer deeper for technical users.
+
 ### 1. Builder
 
 The canvas shown in the MVP: component library, graph editing, node inspector, variables, templates, validation, and a compiled-instruction preview.
@@ -68,6 +70,8 @@ The canvas shown in the MVP: component library, graph editing, node inspector, v
 ### 2. Run view
 
 The same graph becomes an execution trace. Nodes show queued/running/passed/failed states, attempts, cost, duration, artifacts, and logs. Selecting an edge explains the condition and the payload it carried.
+
+The live view splits into graph state and agent lanes. The graph answers where execution is; the lanes replace a wall of terminal windows with readable status, current tool activity, heartbeat, budget, and output summaries. Raw terminal output remains expandable for technical debugging.
 
 ### 3. Library
 

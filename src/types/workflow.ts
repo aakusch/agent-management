@@ -39,6 +39,13 @@ export interface WorkflowEdgeData extends Record<string, unknown> {
   label?: string
   tone?: 'default' | 'success' | 'danger' | 'warning'
   condition?: string
+  loop?: {
+    mode: 'bounded' | 'until-cancelled'
+    maxIterations?: number
+    maxDurationMinutes?: number
+    stopOnNoProgress?: number
+    onExhausted: 'fail' | 'pause' | 'human'
+  }
 }
 
 export type WorkflowEdge = Edge<WorkflowEdgeData>
@@ -59,4 +66,39 @@ export interface WorkflowDocument {
   nodes: WorkflowNode[]
   edges: WorkflowEdge[]
   updatedAt: string
+}
+
+export interface RelayAssignmentBundle {
+  kind: 'relay.assignment'
+  schemaVersion: '1.0'
+  assignment: {
+    id: string
+    title: string
+    task: string
+    createdAt: string
+  }
+  workflow: WorkflowDocument
+  components: ComponentTemplate[]
+  driver: {
+    protocol: 'relay-driver-v1'
+    role: string
+    concurrency: number
+    stateDirectory: string
+    eventLog: string
+    artifactDirectory: string
+    checkpointAfterEachNode: boolean
+    stopConditions: {
+      maxTotalSteps: number
+      maxDurationMinutes: number
+      maxCostUsd?: number
+      stopOnNoProgress: number
+      requireHumanOnExhaustion: boolean
+    }
+    permissions: {
+      spawnAgents: boolean
+      shell: 'project' | 'read-only' | 'none'
+      network: 'ask' | 'allow' | 'deny'
+      publish: 'ask' | 'allow' | 'deny'
+    }
+  }
 }

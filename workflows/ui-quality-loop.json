@@ -53,7 +53,7 @@
     { "id": "review-gate", "source": "review", "target": "gate", "type": "workflow", "data": { "tone": "success" } },
     { "id": "visual-gate", "source": "visual", "target": "gate", "type": "workflow", "data": { "tone": "default" } },
     { "id": "gate-ship", "source": "gate", "target": "ship", "type": "workflow", "data": { "label": "pass", "condition": "route == ship", "tone": "success" } },
-    { "id": "gate-loop", "source": "gate", "target": "implement", "sourceHandle": "source-bottom", "targetHandle": "target-bottom", "type": "workflow", "data": { "label": "revise", "condition": "route == revise", "tone": "danger", "loop": { "maxIterations": 3, "onExhausted": "blocked" } } }
+    { "id": "gate-loop", "source": "gate", "target": "implement", "sourceHandle": "source-bottom", "targetHandle": "target-bottom", "type": "workflow", "data": { "label": "revise", "condition": "route == revise", "tone": "danger", "loop": { "mode": "bounded", "maxIterations": 3, "maxDurationMinutes": 30, "stopOnNoProgress": 2, "onExhausted": "human" } } }
   ],
   "updatedAt": "2026-08-03T00:00:00.000Z"
 }

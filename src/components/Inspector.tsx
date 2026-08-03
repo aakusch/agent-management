@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Braces, ChevronRight, FileText, Settings2, SlidersHorizontal, X } from 'lucide-react'
 import type { ProjectContext, WorkflowNode } from '../types/workflow'
 
@@ -10,6 +11,7 @@ interface InspectorProps {
 }
 
 export function Inspector({ node, project, onClose, onUpdateNode, onUpdateProject }: InspectorProps) {
+  const [tab, setTab] = useState<'configure' | 'source'>('configure')
   if (!node) return null
 
   return (
@@ -23,11 +25,12 @@ export function Inspector({ node, project, onClose, onUpdateNode, onUpdateProjec
       </div>
 
       <div className="inspector-tabs">
-        <button className="active"><Settings2 size={14} /> Configure</button>
-        <button><FileText size={14} /> Source</button>
+        <button className={tab === 'configure' ? 'active' : ''} onClick={() => setTab('configure')}><Settings2 size={14} /> Configure</button>
+        <button className={tab === 'source' ? 'active' : ''} onClick={() => setTab('source')}><FileText size={14} /> Source</button>
       </div>
 
       <div className="inspector-scroll">
+        {tab === 'configure' ? <>
         <section className="form-section">
           <h3><SlidersHorizontal size={14} /> Instance</h3>
           <label>
@@ -77,7 +80,7 @@ export function Inspector({ node, project, onClose, onUpdateNode, onUpdateProjec
         </section>
 
         <section className="form-section">
-          <button className="source-link">
+          <button className="source-link" onClick={() => setTab('source')}>
             <span><FileText size={15} /> components/{node.data.templateId}.md</span>
             <ChevronRight size={15} />
           </button>
@@ -92,6 +95,15 @@ export function Inspector({ node, project, onClose, onUpdateNode, onUpdateProjec
           </label>
           <p className="form-hint">This edits only this node. The reusable Markdown component stays unchanged.</p>
         </section>
+        </> : (
+          <section className="form-section source-panel">
+            <div className="source-file-heading">
+              <FileText size={15} /> components/{node.data.templateId}.md
+            </div>
+            <pre>{`---\nid: ${node.data.templateId}\nname: ${node.data.label}\nkind: ${node.data.kind}\n---\n\n${node.data.instruction}`}</pre>
+            <p className="form-hint">The source component is shared. Return to Configure to create an override for only this workflow node.</p>
+          </section>
+        )}
       </div>
     </aside>
   )

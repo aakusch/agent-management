@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   addEdge,
   Background,
@@ -22,6 +22,7 @@ import {
   FolderGit2,
   Import,
   LayoutTemplate,
+  LayoutDashboard,
   Menu,
   MoreHorizontal,
   Play,
@@ -30,6 +31,7 @@ import {
 } from 'lucide-react'
 import { Inspector } from './components/Inspector'
 import { Library } from './components/Library'
+import { Management, type AppPage } from './components/Management'
 import { WorkflowEdge } from './components/WorkflowEdge'
 import { WorkflowNode } from './components/WorkflowNode'
 import { componentById, componentLibrary } from './data/library'
@@ -37,6 +39,7 @@ import type {
   ComponentTemplate,
   NodeStatus,
   ProjectContext,
+  RelayAssignmentBundle,
   WorkflowDocument,
   WorkflowEdge as WorkflowEdgeType,
   WorkflowNode as WorkflowNodeType,
@@ -59,13 +62,11 @@ const projectSeed: ProjectContext = {
 }
 
 function nodeFromTemplate(
-  templateId: string,
+  template: ComponentTemplate,
   id: string,
   position: { x: number; y: number },
   description?: string,
 ): WorkflowNodeType {
-  const template = componentById[templateId]
-  if (!template) throw new Error(`Unknown component: ${templateId}`)
   return {
     id,
     type: 'workflow',
@@ -85,11 +86,11 @@ function nodeFromTemplate(
 }
 
 const initialNodes: WorkflowNodeType[] = [
-  nodeFromTemplate('implement-ui', 'implement', { x: 40, y: 245 }, 'Build the new product grid from the approved brief.'),
-  nodeFromTemplate('code-review', 'review', { x: 445, y: 72 }, 'Check correctness, maintainability, and project conventions.'),
-  nodeFromTemplate('visual-judge', 'visual', { x: 445, y: 395 }, 'Compare desktop and mobile renders to the reference.'),
-  nodeFromTemplate('decision-gate', 'gate', { x: 840, y: 235 }, 'Merge reviewer verdicts and choose the next route.'),
-  nodeFromTemplate('summarize', 'ship', { x: 1225, y: 235 }, 'Prepare a pull request-ready handoff.'),
+  nodeFromTemplate(componentById['implement-ui'], 'implement', { x: 40, y: 245 }, 'Build the new product grid from the approved brief.'),
+  nodeFromTemplate(componentById['code-review'], 'review', { x: 445, y: 72 }, 'Check correctness, maintainability, and project conventions.'),
+  nodeFromTemplate(componentById['visual-judge'], 'visual', { x: 445, y: 395 }, 'Compare desktop and mobile renders to the reference.'),
+  nodeFromTemplate(componentById['decision-gate'], 'gate', { x: 840, y: 235 }, 'Merge reviewer verdicts and choose the next route.'),
+  nodeFromTemplate(componentById.summarize, 'ship', { x: 1225, y: 235 }, 'Prepare a pull request-ready handoff.'),
 ]
 
 const edge = (
@@ -115,16 +116,28 @@ const initialEdges: WorkflowEdgeType[] = [
   edge('gate-loop', 'gate', 'implement', {
     sourceHandle: 'source-bottom',
     targetHandle: 'target-bottom',
-    data: { label: 'revise', tone: 'danger', condition: 'route == revise' },
+    data: {
+      label: 'revise',
+      tone: 'danger',
+      condition: 'route == revise',
+      loop: { mode: 'bounded', maxIterations: 3, maxDurationMinutes: 30, stopOnNoProgress: 2, onExhausted: 'human' },
+    },
   }),
 ]
 
 const sleep = (milliseconds: number) => new Promise((resolve) => window.setTimeout(resolve, milliseconds))
 
-function Workspace() {
+interface WorkspaceProps {
+  project: ProjectContext
+  onUpdateProject: (project: ProjectContext) => void
+  components: ComponentTemplate[]
+  onImportComponents: (components: ComponentTemplate[]) => void
+  onNavigate: (page: AppPage) => void
+}
+
+function Workspace({ project, onUpdateProject, components, onImportComponents, onNavigate }: WorkspaceProps) {
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
-  const [project, setProject] = useState(projectSeed)
   const [workflowName, setWorkflowName] = useState('UI quality loop')
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [libraryOpen, setLibraryOpen] = useState(true)
@@ -133,6 +146,7 @@ function Workspace() {
   const [toast, setToast] = useState<string | null>(null)
   const importInput = useRef<HTMLInputElement>(null)
   const { screenToFlowPosition, fitView } = useReactFlow()
+  const componentLookup = useMemo(() => Object.fromEntries(components.map((item) => [item.id, item])), [components])
 
   const selectedNode = useMemo(
     () => nodes.find((node) => node.id === selectedNodeId) ?? null,
@@ -171,7 +185,7 @@ function Workspace() {
   const addComponent = useCallback((template: ComponentTemplate, position?: { x: number; y: number }) => {
     const id = `${template.id}-${Date.now()}`
     const fallback = { x: 260 + Math.random() * 420, y: 180 + Math.random() * 260 }
-    setNodes((current) => [...current, nodeFromTemplate(template.id, id, position ?? fallback)])
+    setNodes((current) => [...current, nodeFromTemplate(template, id, position ?? fallback)])
     setSelectedNodeId(id)
     setSaveState('saving')
   }, [setNodes])
@@ -190,10 +204,10 @@ function Workspace() {
   const onDrop = useCallback((event: React.DragEvent) => {
     event.preventDefault()
     const componentId = event.dataTransfer.getData('application/relay-component')
-    const template = componentById[componentId]
+    const template = componentLookup[componentId]
     if (!template) return
     addComponent(template, screenToFlowPosition({ x: event.clientX, y: event.clientY }))
-  }, [addComponent, screenToFlowPosition])
+  }, [addComponent, componentLookup, screenToFlowPosition])
 
   const documentForExport = useCallback((): WorkflowDocument => ({
     schemaVersion: '1.0',
@@ -206,6 +220,44 @@ function Workspace() {
     updatedAt: new Date().toISOString(),
   }), [edges, nodes, project, workflowName])
 
+  const assignmentForExport = useCallback((): RelayAssignmentBundle => {
+    const usedTemplateIds = new Set(nodes.map((node) => node.data.templateId))
+    const createdAt = new Date().toISOString()
+    return {
+      kind: 'relay.assignment',
+      schemaVersion: '1.0',
+      assignment: {
+        id: `assignment-${Date.now()}`,
+        title: workflowName,
+        task: 'Complete the supplied task by executing the workflow graph and preserving its decision history.',
+        createdAt,
+      },
+      workflow: documentForExport(),
+      components: components.filter((component) => usedTemplateIds.has(component.id)),
+      driver: {
+        protocol: 'relay-driver-v1',
+        role: 'Own the workflow state, dispatch configured agents, evaluate deterministic routes, persist every event, and stop only under the declared policy.',
+        concurrency: 3,
+        stateDirectory: '.relay/runs/{{run.id}}',
+        eventLog: '.relay/runs/{{run.id}}/events.jsonl',
+        artifactDirectory: '.relay/runs/{{run.id}}/artifacts',
+        checkpointAfterEachNode: true,
+        stopConditions: {
+          maxTotalSteps: 24,
+          maxDurationMinutes: 60,
+          stopOnNoProgress: 2,
+          requireHumanOnExhaustion: true,
+        },
+        permissions: {
+          spawnAgents: true,
+          shell: 'project',
+          network: 'ask',
+          publish: 'ask',
+        },
+      },
+    }
+  }, [components, documentForExport, nodes, workflowName])
+
   const saveWorkflow = useCallback(async () => {
     setSaveState('saving')
     localStorage.setItem('relay.workflow', JSON.stringify(documentForExport()))
@@ -215,25 +267,30 @@ function Workspace() {
   }, [documentForExport, showToast])
 
   const exportWorkflow = useCallback(() => {
-    const blob = new Blob([JSON.stringify(documentForExport(), null, 2)], { type: 'application/json' })
+    const blob = new Blob([JSON.stringify(assignmentForExport(), null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const anchor = document.createElement('a')
     anchor.href = url
-    anchor.download = `${workflowName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.workflow.json`
+    anchor.download = `${workflowName.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.relay.json`
     anchor.click()
     URL.revokeObjectURL(url)
-    showToast('Workflow exported')
-  }, [documentForExport, showToast, workflowName])
+    showToast('Driver-ready assignment exported')
+  }, [assignmentForExport, showToast, workflowName])
 
   const importWorkflow = useCallback(async (file: File) => {
     try {
-      const imported = JSON.parse(await file.text()) as WorkflowDocument
+      const parsed = JSON.parse(await file.text()) as WorkflowDocument | RelayAssignmentBundle
+      const bundle = (parsed as RelayAssignmentBundle).kind === 'relay.assignment'
+        ? parsed as RelayAssignmentBundle
+        : null
+      const imported: WorkflowDocument = bundle ? bundle.workflow : parsed as WorkflowDocument
       if (imported.schemaVersion !== '1.0' || !Array.isArray(imported.nodes) || !Array.isArray(imported.edges)) {
         throw new Error('Unsupported workflow document')
       }
       setNodes(imported.nodes)
       setEdges(imported.edges)
-      setProject(imported.project)
+      onUpdateProject(imported.project)
+      if (bundle) onImportComponents(bundle.components)
       setWorkflowName(imported.name)
       setSelectedNodeId(null)
       window.setTimeout(() => fitView({ padding: 0.16, duration: 500 }), 50)
@@ -241,7 +298,7 @@ function Workspace() {
     } catch {
       showToast('Could not import this workflow')
     }
-  }, [fitView, setEdges, setNodes, showToast])
+  }, [fitView, onImportComponents, onUpdateProject, setEdges, setNodes, showToast])
 
   const runWorkflow = useCallback(async () => {
     if (running) return
@@ -279,17 +336,18 @@ function Workspace() {
   return (
     <main className="app-shell">
       <header className="topbar">
-        <div className="brand">
+        <button className="brand brand-button" onClick={() => onNavigate('dashboard')}>
           <span className="brand-mark"><Sparkles size={17} /></span>
           <span>Relay</span>
           <em>alpha</em>
-        </div>
+        </button>
         <div className="topbar-divider" />
-        <button className="workspace-switcher">
+        <button className="workspace-switcher" onClick={() => onNavigate('projects')}>
           <FolderGit2 size={15} />
           {project.name}
           <ChevronDown size={14} />
         </button>
+        <button className="topbar-dashboard-link" onClick={() => onNavigate('dashboard')}><LayoutDashboard size={14} /> Dashboard</button>
         <div className="topbar-actions">
           <button className="subtle-button" onClick={() => importInput.current?.click()}>
             <Import size={15} /> Import
@@ -310,13 +368,13 @@ function Workspace() {
             {saveState === 'saved' ? <Check size={15} /> : <Cloud className="pulse" size={15} />}
             {saveState === 'saved' ? 'Saved' : 'Save'}
           </button>
-          <button className="icon-button"><MoreHorizontal size={18} /></button>
+          <button className="icon-button" onClick={() => onNavigate('runs')} aria-label="View runs"><MoreHorizontal size={18} /></button>
         </div>
       </header>
 
       <div className="workspace-body">
         {libraryOpen ? (
-          <Library components={componentLibrary} onAdd={addComponent} onCollapse={() => setLibraryOpen(false)} />
+          <Library components={components} onAdd={addComponent} onCollapse={() => setLibraryOpen(false)} onNewComponent={() => onNavigate('components')} />
         ) : (
           <button className="open-library" onClick={() => setLibraryOpen(true)} aria-label="Open component library">
             <Menu size={17} />
@@ -333,8 +391,8 @@ function Workspace() {
               </div>
             </div>
             <div className="toolbar-actions">
-              <button className="subtle-button"><LayoutTemplate size={15} /> Templates</button>
-              <button className="subtle-button"><Plus size={15} /> Variable</button>
+              <button className="subtle-button" onClick={() => onNavigate('templates')}><LayoutTemplate size={15} /> Templates</button>
+              <button className="subtle-button" onClick={() => onNavigate('projects')}><Plus size={15} /> Variable</button>
               <button className="run-button" disabled={running} onClick={() => void runWorkflow()}>
                 <Play size={14} fill="currentColor" /> {running ? 'Running…' : 'Run workflow'}
               </button>
@@ -380,7 +438,7 @@ function Workspace() {
           project={project}
           onClose={() => setSelectedNodeId(null)}
           onUpdateNode={updateNode}
-          onUpdateProject={(nextProject) => { setProject(nextProject); setSaveState('saving') }}
+          onUpdateProject={(nextProject) => { onUpdateProject(nextProject); setSaveState('saving') }}
         />
       </div>
       {toast && <div className="toast"><Check size={15} /> {toast}</div>}
@@ -393,5 +451,68 @@ function GitFlowIcon() {
 }
 
 export default function App() {
-  return <ReactFlowProvider><Workspace /></ReactFlowProvider>
+  const validPages: AppPage[] = ['dashboard', 'builder', 'workflows', 'components', 'projects', 'templates', 'runs']
+  const pageFromHash = () => {
+    const candidate = window.location.hash.replace('#/', '') as AppPage
+    return validPages.includes(candidate) ? candidate : 'dashboard'
+  }
+  const [page, setPage] = useState<AppPage>(pageFromHash)
+  const [project, setProject] = useState<ProjectContext>(() => {
+    const saved = localStorage.getItem('relay.project')
+    return saved ? JSON.parse(saved) as ProjectContext : projectSeed
+  })
+  const [customComponents, setCustomComponents] = useState<ComponentTemplate[]>(() => {
+    const saved = localStorage.getItem('relay.components')
+    return saved ? JSON.parse(saved) as ComponentTemplate[] : []
+  })
+  const components = useMemo(() => {
+    const customIds = new Set(customComponents.map((item) => item.id))
+    return [...componentLibrary.filter((item) => !customIds.has(item.id)), ...customComponents]
+  }, [customComponents])
+
+  useEffect(() => {
+    const onHashChange = () => setPage(pageFromHash())
+    window.addEventListener('hashchange', onHashChange)
+    return () => window.removeEventListener('hashchange', onHashChange)
+  })
+  useEffect(() => localStorage.setItem('relay.project', JSON.stringify(project)), [project])
+  useEffect(() => localStorage.setItem('relay.components', JSON.stringify(customComponents)), [customComponents])
+
+  const navigate = (nextPage: AppPage) => {
+    window.location.hash = `/${nextPage}`
+    setPage(nextPage)
+  }
+  const mergeComponents = (incoming: ComponentTemplate[]) => {
+    const builtInIds = new Set(componentLibrary.map((item) => item.id))
+    setCustomComponents((current) => {
+      const merged = new Map(current.map((item) => [item.id, item]))
+      incoming.filter((item) => !builtInIds.has(item.id)).forEach((item) => merged.set(item.id, item))
+      return [...merged.values()]
+    })
+  }
+
+  if (page === 'builder') {
+    return (
+      <ReactFlowProvider>
+        <Workspace
+          project={project}
+          onUpdateProject={setProject}
+          components={components}
+          onImportComponents={mergeComponents}
+          onNavigate={navigate}
+        />
+      </ReactFlowProvider>
+    )
+  }
+
+  return (
+    <Management
+      page={page}
+      onNavigate={navigate}
+      project={project}
+      onUpdateProject={setProject}
+      components={components}
+      onCreateComponent={(component) => setCustomComponents((current) => [...current.filter((item) => item.id !== component.id), component])}
+    />
+  )
 }

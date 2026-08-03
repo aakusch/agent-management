@@ -29,9 +29,10 @@ interface LibraryProps {
   components: ComponentTemplate[]
   onAdd: (template: ComponentTemplate) => void
   onCollapse: () => void
+  onNewComponent: () => void
 }
 
-export function Library({ components, onAdd, onCollapse }: LibraryProps) {
+export function Library({ components, onAdd, onCollapse, onNewComponent }: LibraryProps) {
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState<Record<string, boolean>>({
     Agents: true,
@@ -108,7 +109,7 @@ export function Library({ components, onAdd, onCollapse }: LibraryProps) {
         {filtered.length === 0 && <div className="empty-search">No components found.</div>}
       </div>
 
-      <button className="new-component-button">
+      <button className="new-component-button" onClick={onNewComponent}>
         <Plus size={15} /> New Markdown component
       </button>
     </aside>

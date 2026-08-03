@@ -6,6 +6,8 @@ The board is the editor. Markdown files are the source of truth. A workflow conn
 
 ![Relay workflow board](docs/relay-board.png)
 
+![Relay live agent control room](docs/relay-live-runs.png)
+
 ## What is working
 
 - Draggable, connectable workflow canvas with zoom, pan, minimap, and deletion
@@ -13,10 +15,13 @@ The board is the editor. Markdown files are the source of truth. A workflow conn
 - Parallel review branches, labeled decision routes, and a visible revision loop
 - Per-node instruction overrides plus project-level variables
 - Local save and portable JSON import/export
+- Dashboard pages for workflows, components, projects, templates, and live runs
+- Driver-ready `.relay.json` assignment bundles with embedded Markdown and execution policies
+- Split-view control room for graph state and parallel agent lanes
 - Simulated execution states that demonstrate a failed visual review and retry
 - A typed workflow document model ready for a real runner
 
-This first version deliberately simulates execution. It proves the authoring model and interaction design before coupling the product to a specific agent runtime.
+This version deliberately simulates execution. It proves the authoring, handoff, and live-observation model before coupling the product to a specific agent runtime.
 
 ## Run locally
 
@@ -70,7 +75,9 @@ src/data/library.ts     Markdown discovery and frontmatter parsing
 src/types/workflow.ts   Typed component and workflow contracts
 docs/PRODUCT.md         Product thesis, primitives, and roadmap
 docs/ARCHITECTURE.md    Execution model and technical boundaries
+docs/DRIVER-PROTOCOL.md Driver handoff, event stream, and live UI contract
 docs/workflow.schema.json
+docs/assignment.schema.json
 ```
 
 ## Design principles
@@ -83,7 +90,7 @@ docs/workflow.schema.json
 
 ## Next build slice
 
-The next milestone is a local execution daemon: resolve Markdown components, validate variables, execute ready nodes concurrently, persist artifacts/events, and enforce loop limits. See [Product framework](docs/PRODUCT.md) and [Architecture](docs/ARCHITECTURE.md).
+The next milestone is a local execution daemon: resolve Markdown components, validate variables, execute ready nodes concurrently, persist artifacts/events, and stream live state to the Runs control room. See [Product framework](docs/PRODUCT.md), [Architecture](docs/ARCHITECTURE.md), and [Driver protocol](docs/DRIVER-PROTOCOL.md).
 
 ## License
 
