@@ -1,6 +1,6 @@
 import type { Edge, Node } from '@xyflow/react'
 
-export type ComponentKind = 'agent' | 'judge' | 'router' | 'human' | 'tool'
+export type ComponentKind = 'agent' | 'judge' | 'router' | 'human' | 'tool' | 'workflow'
 export type NodeStatus = 'idle' | 'queued' | 'running' | 'passed' | 'failed'
 
 export interface ComponentTemplate {
@@ -16,6 +16,7 @@ export interface ComponentTemplate {
   outputs: string[]
   instruction: string
   defaults?: Record<string, string>
+  workflowId?: string
 }
 
 export interface WorkflowNodeData extends Record<string, unknown> {
@@ -31,6 +32,12 @@ export interface WorkflowNodeData extends Record<string, unknown> {
   result?: string
   instruction: string
   overrides: Record<string, string>
+  subworkflow?: {
+    workflowId: string
+    execution: 'inline' | 'isolated'
+    context: 'inherit' | 'mapped' | 'none'
+    onFailure: 'bubble' | 'pause' | 'continue'
+  }
 }
 
 export type WorkflowNode = Node<WorkflowNodeData, 'workflow'>

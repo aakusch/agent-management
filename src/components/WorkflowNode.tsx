@@ -13,6 +13,7 @@ import {
   ShieldCheck,
   TerminalSquare,
   WandSparkles,
+  Workflow,
   X,
 } from 'lucide-react'
 import type { WorkflowNode as WorkflowNodeType } from '../types/workflow'
@@ -23,6 +24,7 @@ const icons = {
   shield: ShieldCheck,
   accessibility: Accessibility,
   bug: Bug,
+  workflow: Workflow,
   scan: ScanSearch,
   eye: Eye,
   terminal: TerminalSquare,

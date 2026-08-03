@@ -17,6 +17,9 @@ The board is the editor. Markdown files are the source of truth. A workflow conn
 - Dashboard pages for workflows, components, projects, templates, and live runs
 - Driver-ready `.relay.json` assignment bundles with embedded Markdown and execution policies
 - Split-view control room for graph state and parallel agent lanes
+- User-arranged multi-run boards with codebase sections, honest connection states, and draggable workflow tiles
+- Catalyst authoring for signed hooks, connector events, runner cron, and secure queries
+- Saved workflows exposed as reusable nested-workflow nodes
 - Task-first run setup with guided, adaptive, and full-autonomous execution modes
 - Persistent dark and light themes
 - Seven built-in workflow templates plus persisted user templates with private/published visibility
@@ -95,6 +98,8 @@ docs/assignment.schema.json
 ## Next build slice
 
 The next milestone is a local execution daemon: resolve Markdown components, validate variables, execute ready nodes concurrently, persist artifacts/events, and stream live state to the Runs control room. See [Product framework](docs/PRODUCT.md), [Architecture](docs/ARCHITECTURE.md), and [Driver protocol](docs/DRIVER-PROTOCOL.md).
+
+![Codebase-wide run monitoring concept](docs/run-monitoring-concept.png)
 
 ## License
 

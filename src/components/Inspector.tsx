@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Braces, ChevronRight, FileText, Settings2, SlidersHorizontal, X } from 'lucide-react'
+import { Braces, ChevronRight, FileText, Layers3, Settings2, SlidersHorizontal, X } from 'lucide-react'
 import type { ProjectContext, WorkflowNode } from '../types/workflow'
 
 interface InspectorProps {
@@ -13,6 +13,11 @@ interface InspectorProps {
 export function Inspector({ node, project, onClose, onUpdateNode, onUpdateProject }: InspectorProps) {
   const [tab, setTab] = useState<'configure' | 'source'>('configure')
   if (!node) return null
+  const sourcePath = node.data.subworkflow ? `workflows/${node.data.subworkflow.workflowId}.json` : `components/${node.data.templateId}.md`
+  const updateSubworkflow = (patch: Partial<NonNullable<WorkflowNode['data']['subworkflow']>>) => {
+    if (!node.data.subworkflow) return
+    onUpdateNode(node.id, { subworkflow: { ...node.data.subworkflow, ...patch } })
+  }
 
   return (
     <aside className="inspector-panel">
@@ -50,6 +55,15 @@ export function Inspector({ node, project, onClose, onUpdateNode, onUpdateProjec
           </label>
         </section>
 
+        {node.data.subworkflow && <section className="form-section nested-workflow-settings">
+          <h3><Layers3 size={14} /> Nested workflow</h3>
+          <div className="nested-workflow-id"><span>Workflow reference</span><code>{node.data.subworkflow.workflowId}</code></div>
+          <label><span>Execution boundary</span><select value={node.data.subworkflow.execution} onChange={(event) => updateSubworkflow({ execution: event.target.value as NonNullable<WorkflowNode['data']['subworkflow']>['execution'] })}><option value="isolated">Isolated child run</option><option value="inline">Inline in parent run</option></select></label>
+          <label><span>Context passed</span><select value={node.data.subworkflow.context} onChange={(event) => updateSubworkflow({ context: event.target.value as NonNullable<WorkflowNode['data']['subworkflow']>['context'] })}><option value="inherit">Inherit parent context</option><option value="mapped">Mapped inputs only</option><option value="none">Objective only</option></select></label>
+          <label><span>If child workflow fails</span><select value={node.data.subworkflow.onFailure} onChange={(event) => updateSubworkflow({ onFailure: event.target.value as NonNullable<WorkflowNode['data']['subworkflow']>['onFailure'] })}><option value="bubble">Fail parent step</option><option value="pause">Pause for decision</option><option value="continue">Continue with failure artifact</option></select></label>
+          <p className="form-hint">The compiler resolves this workflow recursively and rejects self-reference or any unbounded dependency cycle.</p>
+        </section>}
+
         <section className="form-section">
           <h3><Braces size={14} /> Project context</h3>
           <label>
@@ -81,7 +95,7 @@ export function Inspector({ node, project, onClose, onUpdateNode, onUpdateProjec
 
         <section className="form-section">
           <button className="source-link" onClick={() => setTab('source')}>
-            <span><FileText size={15} /> components/{node.data.templateId}.md</span>
+            <span><FileText size={15} /> {sourcePath}</span>
             <ChevronRight size={15} />
           </button>
           <label>
@@ -98,9 +112,9 @@ export function Inspector({ node, project, onClose, onUpdateNode, onUpdateProjec
         </> : (
           <section className="form-section source-panel">
             <div className="source-file-heading">
-              <FileText size={15} /> components/{node.data.templateId}.md
+              <FileText size={15} /> {sourcePath}
             </div>
-            <pre>{`---\nid: ${node.data.templateId}\nname: ${node.data.label}\nkind: ${node.data.kind}\n---\n\n${node.data.instruction}`}</pre>
+            <pre>{node.data.subworkflow ? JSON.stringify({ type: 'workflow-reference', ...node.data.subworkflow }, null, 2) : `---\nid: ${node.data.templateId}\nname: ${node.data.label}\nkind: ${node.data.kind}\n---\n\n${node.data.instruction}`}</pre>
             <p className="form-hint">The source component is shared. Return to Configure to create an override for only this workflow node.</p>
           </section>
         )}

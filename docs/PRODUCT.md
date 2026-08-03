@@ -19,6 +19,9 @@ Relay treats agent work as a graph made from reusable, versioned instructions. T
 | Artifact | Immutable output from a node attempt | patch, screenshot, verdict |
 | Run | Event log for one workflow execution | UI quality run #184 |
 | Blueprint | Reusable subgraph with exposed inputs/outputs | Review fan-out |
+| Catalyst | Authenticated workflow entrypoint | Signed pull-request hook or cron |
+| Nested workflow | Saved workflow invoked as one node | Feature delivery invokes release readiness |
+| Monitor board | User-arranged projection of real run streams | All runs touching a monorepo |
 
 ## Component customization
 
@@ -75,13 +78,19 @@ The same graph becomes an execution trace. Nodes show queued/running/passed/fail
 
 The live view splits into graph state and agent lanes. The graph answers where execution is; the lanes replace a wall of terminal windows with readable status, current tool activity, heartbeat, budget, and output summaries. Raw terminal output remains expandable for technical debugging.
 
-### 3. Library
+The multi-run view organizes those same real streams into named codebase sections. It makes concurrent objectives, catalyst provenance, nested-workflow ancestry, package ownership, shared-file locks, and conflicts legible without turning the browser into the scheduler. Users can arrange a workflow before it starts, but the tile remains explicitly `not started` or `waiting for runner` until the driver reports otherwise.
+
+### 3. Catalysts
+
+Catalysts describe authenticated ways to create runs: signed webhooks, connector events, runner-owned schedules, and schema-limited secure queries. The browser never becomes the public receiver. A local daemon or hosted Relay boundary authenticates, rate-limits, deduplicates, records provenance, and only then creates a normal run governed by the workflow's permissions and budgets.
+
+### 4. Library
 
 Searchable components and blueprints from the repository, workspace, or an optional registry. Users can compare versions, inspect tests, and see where a component is used.
 
 User-created templates are private by default. Publishing creates a sanitized, versioned registry snapshot: repository paths, secrets, run history, and project-specific values are excluded. Published versions are immutable; edits produce a new version. Unpublishing removes future discovery without breaking workflows that already pin the published version. The current UI persists this visibility locally until the registry service exists.
 
-### 4. Projects
+### 5. Projects
 
 Bindings for repository root, branch/worktree strategy, instruction files, commands, secrets, tool permissions, preview environments, and model budgets.
 

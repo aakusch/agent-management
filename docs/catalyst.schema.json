@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://relay.local/schemas/catalyst.schema.json",
+  "title": "Relay catalyst definition",
+  "type": "object",
+  "required": ["id", "name", "kind", "workflowId", "selector", "security", "status", "createdAt"],
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "name": { "type": "string", "minLength": 1 },
+    "kind": { "enum": ["signed-webhook", "connector-event", "cron", "secure-query"] },
+    "workflowId": { "type": "string", "minLength": 1 },
+    "workflowName": { "type": "string", "minLength": 1 },
+    "selector": { "type": "string", "minLength": 1 },
+    "security": { "enum": ["hmac", "connector-oauth", "runner-token"] },
+    "status": { "enum": ["awaiting-runner", "paused"] },
+    "createdAt": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": false
+}

@@ -9,6 +9,7 @@ export interface WorkflowRecord {
   updatedAt?: string
   status: 'draft' | 'ready'
   source: 'starter' | 'local' | 'imported'
+  steps?: string[]
 }
 
 export interface WorkflowTemplate {
@@ -31,4 +32,47 @@ export interface PendingRun {
   configuration: RunConfiguration
   createdAt: string
   state: 'waiting-for-runner'
+}
+
+export type RunMonitorStatus = 'not-started' | 'waiting-runner' | 'running' | 'blocked' | 'completed'
+
+export interface RunMonitorGroup {
+  id: string
+  name: string
+  projectName?: string
+}
+
+export interface RunMonitorTile {
+  id: string
+  groupId: string
+  workflowId?: string
+  workflowName: string
+  objective?: string
+  projectName?: string
+  status: RunMonitorStatus
+  steps: string[]
+  catalyst?: string
+  parentWorkflow?: string
+  createdAt: string
+}
+
+export interface RunMonitorBoard {
+  name: string
+  columns: 1 | 2
+  groups: RunMonitorGroup[]
+  tiles: RunMonitorTile[]
+}
+
+export type CatalystKind = 'signed-webhook' | 'connector-event' | 'cron' | 'secure-query'
+
+export interface CatalystDefinition {
+  id: string
+  name: string
+  kind: CatalystKind
+  workflowId: string
+  workflowName: string
+  selector: string
+  security: 'hmac' | 'connector-oauth' | 'runner-token'
+  status: 'awaiting-runner' | 'paused'
+  createdAt: string
 }

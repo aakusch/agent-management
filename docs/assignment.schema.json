@@ -29,7 +29,7 @@
           "id": { "type": "string" },
           "name": { "type": "string" },
           "description": { "type": "string" },
-          "kind": { "enum": ["agent", "judge", "router", "human", "tool"] },
+          "kind": { "enum": ["agent", "judge", "router", "human", "tool", "workflow"] },
           "icon": { "type": "string" },
           "color": { "type": "string" },
           "version": { "type": "string" },
@@ -37,7 +37,8 @@
           "inputs": { "type": "array", "items": { "type": "string" } },
           "outputs": { "type": "array", "items": { "type": "string" } },
           "instruction": { "type": "string" },
-          "defaults": { "type": "object", "additionalProperties": { "type": "string" } }
+          "defaults": { "type": "object", "additionalProperties": { "type": "string" } },
+          "workflowId": { "type": "string" }
         },
         "additionalProperties": false
       }

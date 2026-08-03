@@ -6,18 +6,20 @@ import {
   Blocks,
   Bot,
   Bug,
+  Cable,
   CheckCircle2,
   ChevronRight,
   CircleDot,
   CircleUserRound,
+  Clock3,
   FileCode2,
   FileCheck2,
   FolderGit2,
   GitFork,
   Eye,
   Layers3,
+  KeyRound,
   Moon,
-  Play,
   Plus,
   Search,
   ScanSearch,
@@ -26,14 +28,17 @@ import {
   Sparkles,
   Sun,
   TerminalSquare,
+  Webhook,
+  Zap,
   WandSparkles,
   Workflow,
   X,
 } from 'lucide-react'
 import type { ComponentKind, ComponentTemplate, ProjectContext } from '../types/workflow'
-import type { PendingRun, WorkflowRecord, WorkflowTemplate } from '../types/catalog'
+import type { CatalystDefinition, CatalystKind, PendingRun, RunMonitorBoard, WorkflowRecord, WorkflowTemplate } from '../types/catalog'
+import { RunBoard } from './RunBoard'
 
-export type AppPage = 'dashboard' | 'builder' | 'workflows' | 'components' | 'projects' | 'templates' | 'runs'
+export type AppPage = 'dashboard' | 'builder' | 'workflows' | 'components' | 'projects' | 'templates' | 'catalysts' | 'runs'
 
 interface ManagementProps {
   page: Exclude<AppPage, 'builder'>
@@ -50,6 +55,11 @@ interface ManagementProps {
   onToggleTemplatePublished: (id: string) => void
   onUseTemplate: (template: WorkflowTemplate) => void
   pendingRun: PendingRun | null
+  monitorBoard: RunMonitorBoard
+  onUpdateMonitorBoard: (board: RunMonitorBoard) => void
+  catalysts: CatalystDefinition[]
+  onCreateCatalyst: (catalyst: CatalystDefinition) => void
+  onToggleCatalyst: (id: string) => void
 }
 
 const pageLabels: Record<Exclude<AppPage, 'builder'>, string> = {
@@ -58,6 +68,7 @@ const pageLabels: Record<Exclude<AppPage, 'builder'>, string> = {
   components: 'Components',
   projects: 'Projects',
   templates: 'Templates',
+  catalysts: 'Catalysts',
   runs: 'Runs',
 }
 
@@ -66,6 +77,7 @@ const navItems = [
   { id: 'components', label: 'Components', icon: Blocks },
   { id: 'projects', label: 'Projects', icon: FolderGit2 },
   { id: 'templates', label: 'Templates', icon: Layers3 },
+  { id: 'catalysts', label: 'Catalysts', icon: Zap },
   { id: 'runs', label: 'Runs', icon: Activity },
 ] as const
 
@@ -105,6 +117,11 @@ export function Management({
   onToggleTemplatePublished,
   onUseTemplate,
   pendingRun,
+  monitorBoard,
+  onUpdateMonitorBoard,
+  catalysts,
+  onCreateCatalyst,
+  onToggleCatalyst,
 }: ManagementProps) {
   return (
     <main className="app-shell management-shell">
@@ -148,7 +165,8 @@ export function Management({
           {page === 'components' && <ComponentsPage components={components} onCreate={onCreateComponent} />}
           {page === 'projects' && <ProjectsPage project={project} onUpdate={onUpdateProject} />}
           {page === 'templates' && <TemplatesPage templates={templates} onCreate={onCreateTemplate} onTogglePublished={onToggleTemplatePublished} onUseTemplate={onUseTemplate} />}
-          {page === 'runs' && <RunsPage onNavigate={onNavigate} pendingRun={pendingRun} />}
+          {page === 'catalysts' && <CatalystsPage catalysts={catalysts} workflows={workflows} onCreate={onCreateCatalyst} onToggle={onToggleCatalyst} />}
+          {page === 'runs' && <RunsPage onNavigate={onNavigate} pendingRun={pendingRun} workflows={workflows} board={monitorBoard} onUpdateBoard={onUpdateMonitorBoard} />}
         </section>
       </div>
     </main>
@@ -334,9 +352,33 @@ function TemplatesPage({ templates, onCreate, onTogglePublished, onUseTemplate }
   </div>
 }
 
-function RunsPage({ onNavigate, pendingRun }: { onNavigate: (page: AppPage) => void; pendingRun: PendingRun | null }) {
-  return <div className="page-wrap"><PageHeading eyebrow="Execution" title="Runs" description="Live driver and agent activity will appear here when a Relay CLI is connected." action={<button className="primary-cta" onClick={() => onNavigate('builder')}><Play size={14} /> Prepare run</button>} />
-    {pendingRun ? <section className="surface pending-run"><span className="pending-run-icon"><TerminalSquare size={22} /></span><div className="pending-run-copy"><span className="eyebrow">Waiting for local runner</span><h2>{pendingRun.workflowName}</h2><p>{pendingRun.configuration.task}</p><div className="pending-run-meta"><span>{pendingRun.configuration.autonomy}</span>{pendingRun.projectName && <span>{pendingRun.projectName}</span>}<span>{pendingRun.configuration.execution}</span></div></div><div className="connect-command"><span>Run from the project directory</span><code>relay connect</code><small>The website will attach this prepared run after the CLI is paired.</small></div></section> : <section className="surface runs-empty"><span><Activity size={23} /></span><h2>No runs yet</h2><p>Prepare a workflow run, then connect the Relay CLI from the target project. Real agent status, events, and artifacts will appear here.</p><button className="secondary-cta" onClick={() => onNavigate('builder')}>Open workflow builder <ArrowRight size={13} /></button></section>}
-    <section className="surface runner-explanation"><div><span className="eyebrow">Live tracking</span><h2>What appears after connection</h2></div><div className="runner-feature-grid"><span><Workflow size={16} /><strong>Graph state</strong><small>Ready, running, waiting, and completed nodes.</small></span><span><TerminalSquare size={16} /><strong>Agent lanes</strong><small>Current instruction, tool activity, and heartbeat.</small></span><span><FileCode2 size={16} /><strong>Artifacts</strong><small>Patches, reports, screenshots, and approvals.</small></span></div></section>
+const catalystKinds: Record<CatalystKind, { label: string; detail: string; placeholder: string; security: CatalystDefinition['security']; Icon: typeof Zap }> = {
+  'signed-webhook': { label: 'Signed webhook', detail: 'Receive an HMAC-verified event from an external system.', placeholder: 'POST /hooks/github-pr', security: 'hmac', Icon: Webhook },
+  'connector-event': { label: 'Connector event', detail: 'Subscribe through an authorized GitHub, Slack, or issue connector.', placeholder: 'github.pull_request.opened', security: 'connector-oauth', Icon: Cable },
+  cron: { label: 'Schedule', detail: 'Ask the connected runner to start on a recurring schedule.', placeholder: '0 9 * * 1-5', security: 'runner-token', Icon: Clock3 },
+  'secure-query': { label: 'Secure query', detail: 'Expose an authenticated, schema-limited workflow request.', placeholder: 'query: dependency-risk', security: 'runner-token', Icon: KeyRound },
+}
+
+function CatalystsPage({ catalysts, workflows, onCreate, onToggle }: { catalysts: CatalystDefinition[]; workflows: WorkflowRecord[]; onCreate: (catalyst: CatalystDefinition) => void; onToggle: (id: string) => void }) {
+  const [creating, setCreating] = useState(false)
+  const [draft, setDraft] = useState({ name: '', kind: 'connector-event' as CatalystKind, workflowId: workflows[0]?.id ?? '', selector: '' })
+  const kind = catalystKinds[draft.kind]
+  const create = () => {
+    const workflow = workflows.find((item) => item.id === draft.workflowId)
+    if (!workflow || !draft.name.trim() || !draft.selector.trim()) return
+    const id = draft.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
+    onCreate({ id, name: draft.name.trim(), kind: draft.kind, workflowId: workflow.id, workflowName: workflow.name, selector: draft.selector.trim(), security: kind.security, status: 'awaiting-runner', createdAt: new Date().toISOString() })
+    setCreating(false)
+    setDraft({ name: '', kind: 'connector-event', workflowId: workflows[0]?.id ?? '', selector: '' })
+  }
+
+  return <div className="page-wrap"><PageHeading eyebrow="Workflow entrypoints" title="Catalysts" description="Define what may start a workflow. Relay verifies the event at the receiver, records its provenance, then creates a normal auditable run." action={<button className="primary-cta" onClick={() => setCreating(true)}><Plus size={15} /> New catalyst</button>} />
+    {creating && <section className="surface catalyst-create"><div className="editor-title"><div><span className="eyebrow">Secure entrypoint</span><h2>Configure a catalyst</h2></div><button className="icon-button" onClick={() => setCreating(false)}><X size={16} /></button></div><div className="catalyst-create-grid"><div className="catalyst-kind-grid">{(Object.entries(catalystKinds) as [CatalystKind, typeof kind][]).map(([id, option]) => { const Icon = option.Icon; return <button className={draft.kind === id ? 'selected' : ''} key={id} onClick={() => setDraft({ ...draft, kind: id })}><Icon size={17} /><strong>{option.label}</strong><small>{option.detail}</small></button> })}</div><div className="editor-form catalyst-fields"><label><span>Name</span><input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="PR quality check" /></label><label><span>Workflow</span><select value={draft.workflowId} onChange={(event) => setDraft({ ...draft, workflowId: event.target.value })}>{workflows.map((workflow) => <option value={workflow.id} key={workflow.id}>{workflow.name}</option>)}</select></label><label><span>Event, schedule, or query selector</span><input className="source-editor" value={draft.selector} onChange={(event) => setDraft({ ...draft, selector: event.target.value })} placeholder={kind.placeholder} /></label><div className="catalyst-security"><ShieldCheck size={16} /><div><strong>{kind.security === 'hmac' ? 'HMAC signature required' : kind.security === 'connector-oauth' ? 'Connector authorization required' : 'Runner token required'}</strong><span>Secrets are referenced by name and resolved by the receiver. They are never stored in workflow JSON.</span></div></div><div className="editor-actions"><button className="secondary-cta" onClick={() => setCreating(false)}>Cancel</button><button className="primary-cta" onClick={create} disabled={!draft.name.trim() || !draft.selector.trim() || !draft.workflowId}>Save catalyst</button></div></div></div></section>}
+    {catalysts.length ? <div className="catalyst-list">{catalysts.map((catalyst) => { const option = catalystKinds[catalyst.kind]; const Icon = option.Icon; return <article className="surface catalyst-card" key={catalyst.id}><span className="catalyst-card-icon"><Icon size={18} /></span><div className="catalyst-card-main"><div><span className="eyebrow">{option.label}</span><h2>{catalyst.name}</h2></div><p>{catalyst.selector}</p><div className="catalyst-route"><span><Zap size={12} /> {catalyst.workflowName}</span><ArrowRight size={12} /><span><ShieldCheck size={12} /> {catalyst.security}</span></div></div><div className="catalyst-card-state"><span className={`status-chip ${catalyst.status === 'paused' ? 'draft' : 'ready'}`}><i /> {catalyst.status === 'paused' ? 'Paused' : 'Awaiting receiver'}</span><button className="secondary-cta" onClick={() => onToggle(catalyst.id)}>{catalyst.status === 'paused' ? 'Enable' : 'Pause'}</button></div></article> })}</div> : <section className="surface catalyst-empty"><span><Webhook size={22} /></span><h2>No catalysts configured</h2><p>Create a signed hook, connector subscription, schedule, or secure query. Nothing listens publicly until a Relay receiver is connected and authorized.</p><button className="secondary-cta" onClick={() => setCreating(true)}>Configure first catalyst <ArrowRight size={13} /></button></section>}
+    <section className="catalyst-boundary"><ShieldCheck size={17} /><div><strong>Receiver boundary</strong><span>The website authors catalyst definitions. A local daemon or hosted Relay receiver performs signature checks, connector authentication, replay protection, rate limits, and idempotency before creating a run.</span></div></section>
   </div>
+}
+
+function RunsPage({ onNavigate, pendingRun, workflows, board, onUpdateBoard }: { onNavigate: (page: AppPage) => void; pendingRun: PendingRun | null; workflows: WorkflowRecord[]; board: RunMonitorBoard; onUpdateBoard: (board: RunMonitorBoard) => void }) {
+  return <div className="run-board-page"><RunBoard board={board} workflows={workflows} pendingRun={pendingRun} onChange={onUpdateBoard} onOpenBuilder={() => onNavigate('builder')} /></div>
 }

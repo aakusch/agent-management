@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react'
 import {
+  Accessibility,
   Bot,
+  Bug,
   ChevronDown,
   CircleUserRound,
   Eye,
@@ -10,19 +12,26 @@ import {
   Plus,
   ScanSearch,
   Search,
+  ShieldCheck,
   TerminalSquare,
   WandSparkles,
+  Workflow,
 } from 'lucide-react'
 import type { ComponentTemplate } from '../types/workflow'
 
 const icons = {
   wand: WandSparkles,
+  bot: Bot,
+  shield: ShieldCheck,
+  accessibility: Accessibility,
+  bug: Bug,
   scan: ScanSearch,
   eye: Eye,
   terminal: TerminalSquare,
   split: GitFork,
   'user-check': CircleUserRound,
   'file-check': FileCheck2,
+  workflow: Workflow,
 } as const
 
 interface LibraryProps {
@@ -38,6 +47,7 @@ export function Library({ components, onAdd, onCollapse, onNewComponent }: Libra
     Agents: true,
     Logic: true,
     'Tools & people': true,
+    Workflows: true,
   })
 
   const filtered = useMemo(() => {
@@ -52,6 +62,7 @@ export function Library({ components, onAdd, onCollapse, onNewComponent }: Libra
     { label: 'Agents', items: filtered.filter((item) => ['agent', 'judge'].includes(item.kind)) },
     { label: 'Logic', items: filtered.filter((item) => item.kind === 'router') },
     { label: 'Tools & people', items: filtered.filter((item) => ['tool', 'human'].includes(item.kind)) },
+    { label: 'Workflows', items: filtered.filter((item) => item.kind === 'workflow') },
   ]
 
   return (

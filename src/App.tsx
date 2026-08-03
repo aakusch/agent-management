@@ -47,7 +47,7 @@ import type {
   WorkflowEdge as WorkflowEdgeType,
   WorkflowNode as WorkflowNodeType,
 } from './types/workflow'
-import type { PendingRun, WorkflowRecord, WorkflowTemplate } from './types/catalog'
+import type { CatalystDefinition, PendingRun, RunMonitorBoard, WorkflowRecord, WorkflowTemplate } from './types/catalog'
 
 const nodeTypes = { workflow: WorkflowNode }
 const edgeTypes = { workflow: WorkflowEdge }
@@ -72,6 +72,7 @@ const starterWorkflow: WorkflowRecord = {
   nodeCount: 5,
   status: 'ready',
   source: 'starter',
+  steps: ['Implement UI', 'Code review', 'Visual judge', 'Quality gate', 'Ship summary'],
 }
 
 function nodeFromTemplate(
@@ -94,6 +95,12 @@ function nodeFromTemplate(
       status: 'idle',
       instruction: template.instruction,
       overrides: {},
+      subworkflow: template.workflowId ? {
+        workflowId: template.workflowId,
+        execution: 'isolated',
+        context: 'inherit',
+        onFailure: 'bubble',
+      } : undefined,
     },
   }
 }
@@ -154,6 +161,7 @@ interface WorkspaceProps {
   onWorkflowSaved: (workflow: WorkflowRecord) => void
   onPrepareRun: (run: PendingRun) => void
   startingTemplate?: WorkflowTemplate
+  workflows: WorkflowRecord[]
 }
 
 function graphFromTemplate(template: WorkflowTemplate | undefined, components: ComponentTemplate[]) {
@@ -200,11 +208,12 @@ function graphFromTemplate(template: WorkflowTemplate | undefined, components: C
   return { nodes, edges }
 }
 
-function Workspace({ project, onUpdateProject, components, onImportComponents, onNavigate, theme, onToggleTheme, onWorkflowSaved, onPrepareRun, startingTemplate }: WorkspaceProps) {
+function Workspace({ project, onUpdateProject, components, onImportComponents, onNavigate, theme, onToggleTheme, onWorkflowSaved, onPrepareRun, startingTemplate, workflows }: WorkspaceProps) {
   const startingGraph = graphFromTemplate(startingTemplate, components)
   const [nodes, setNodes, onNodesChange] = useNodesState(startingGraph.nodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(startingGraph.edges)
   const [workflowName, setWorkflowName] = useState(startingTemplate?.name ?? 'Implementation quality loop')
+  const [workflowId] = useState(startingTemplate?.id ?? 'implementation-quality-loop')
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
   const [libraryOpen, setLibraryOpen] = useState(true)
@@ -215,7 +224,24 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
   const [overflowOpen, setOverflowOpen] = useState(false)
   const importInput = useRef<HTMLInputElement>(null)
   const { screenToFlowPosition, fitView } = useReactFlow()
-  const componentLookup = useMemo(() => Object.fromEntries(components.map((item) => [item.id, item])), [components])
+  const workflowComponents = useMemo<ComponentTemplate[]>(() => workflows
+    .filter((workflow) => workflow.id !== workflowId)
+    .map((workflow) => ({
+      id: `workflow-ref-${workflow.id}`,
+      name: workflow.name,
+      description: `Run the saved ${workflow.name} workflow as a nested, reusable step.`,
+      kind: 'workflow',
+      icon: 'workflow',
+      color: 'cyan',
+      version: '1.0.0',
+      tags: ['workflow', 'nested', 'reusable'],
+      inputs: ['objective', 'context'],
+      outputs: ['result', 'artifacts'],
+      instruction: `Invoke saved workflow ${workflow.id}. The driver must resolve and validate it before execution.`,
+      workflowId: workflow.id,
+    })), [workflowId, workflows])
+  const authoringComponents = useMemo(() => [...components, ...workflowComponents], [components, workflowComponents])
+  const componentLookup = useMemo(() => Object.fromEntries(authoringComponents.map((item) => [item.id, item])), [authoringComponents])
 
   const selectedNode = useMemo(
     () => nodes.find((node) => node.id === selectedNodeId) ?? null,
@@ -283,14 +309,14 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
 
   const documentForExport = useCallback((): WorkflowDocument => ({
     schemaVersion: '1.0',
-    id: 'implementation-quality-loop',
+    id: workflowId,
     name: workflowName,
     description: 'Implement, review in parallel, revise when required, and prepare a handoff.',
     project,
     nodes,
     edges,
     updatedAt: new Date().toISOString(),
-  }), [edges, nodes, project, workflowName])
+  }), [edges, nodes, project, workflowId, workflowName])
 
   const assignmentForExport = useCallback((): RelayAssignmentBundle => {
     const usedTemplateIds = new Set(nodes.map((node) => node.data.templateId))
@@ -305,7 +331,7 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
         createdAt,
       },
       workflow: documentForExport(),
-      components: components.filter((component) => usedTemplateIds.has(component.id)),
+      components: authoringComponents.filter((component) => usedTemplateIds.has(component.id)),
       driver: {
         protocol: 'relay-driver-v1',
         role: 'Own the workflow state, dispatch configured agents, evaluate deterministic routes, persist every event, and stop only under the declared policy.',
@@ -328,13 +354,13 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
         },
       },
     }
-  }, [components, documentForExport, kickoffTask, nodes, workflowName])
+  }, [authoringComponents, documentForExport, kickoffTask, nodes, workflowName])
 
   const saveWorkflow = useCallback(async () => {
     setSaveState('saving')
     localStorage.setItem('relay.workflow', JSON.stringify(documentForExport()))
     onWorkflowSaved({
-      id: 'implementation-quality-loop',
+      id: workflowId,
       name: workflowName,
       description: 'Implement, review in parallel, revise when required, and prepare a handoff.',
       nodeCount: nodes.length,
@@ -342,11 +368,12 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
       updatedAt: new Date().toISOString(),
       status: 'ready',
       source: 'local',
+      steps: nodes.map((node) => node.data.label),
     })
     await sleep(350)
     setSaveState('saved')
     showToast('Workflow saved locally')
-  }, [documentForExport, nodes.length, onWorkflowSaved, project.name, project.root, showToast, workflowName])
+  }, [documentForExport, nodes, onWorkflowSaved, project.name, project.root, showToast, workflowId, workflowName])
 
   const exportWorkflow = useCallback(() => {
     const blob = new Blob([JSON.stringify(assignmentForExport(), null, 2)], { type: 'application/json' })
@@ -455,7 +482,7 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
 
       <div className="workspace-body">
         {libraryOpen ? (
-          <Library components={components} onAdd={addComponent} onCollapse={() => setLibraryOpen(false)} onNewComponent={() => onNavigate('components')} />
+          <Library components={authoringComponents} onAdd={addComponent} onCollapse={() => setLibraryOpen(false)} onNewComponent={() => onNavigate('components')} />
         ) : (
           <button className="open-library" onClick={() => setLibraryOpen(true)} aria-label="Open component library">
             <Menu size={17} />
@@ -525,7 +552,7 @@ function GitFlowIcon() {
 }
 
 export default function App() {
-  const validPages: AppPage[] = ['dashboard', 'builder', 'workflows', 'components', 'projects', 'templates', 'runs']
+  const validPages: AppPage[] = ['dashboard', 'builder', 'workflows', 'components', 'projects', 'templates', 'catalysts', 'runs']
   const pageFromHash = () => {
     const candidate = window.location.hash.replace('#/', '') as AppPage
     return validPages.includes(candidate) ? candidate : 'dashboard'
@@ -555,6 +582,20 @@ export default function App() {
     const saved = localStorage.getItem('relay.pendingRun')
     return saved ? JSON.parse(saved) as PendingRun : null
   })
+  const [catalysts, setCatalysts] = useState<CatalystDefinition[]>(() => {
+    const saved = localStorage.getItem('relay.catalysts')
+    return saved ? JSON.parse(saved) as CatalystDefinition[] : []
+  })
+  const [monitorBoard, setMonitorBoard] = useState<RunMonitorBoard>(() => {
+    const saved = localStorage.getItem('relay.monitorBoard')
+    if (saved) return JSON.parse(saved) as RunMonitorBoard
+    return {
+      name: 'Codebase runs',
+      columns: 2,
+      groups: [{ id: 'workspace', name: 'Workspace', projectName: project.root ? project.name : undefined }],
+      tiles: [],
+    }
+  })
   const components = useMemo(() => {
     const customIds = new Set(customComponents.map((item) => item.id))
     return [...componentLibrary.filter((item) => !customIds.has(item.id)), ...customComponents]
@@ -569,10 +610,35 @@ export default function App() {
   useEffect(() => localStorage.setItem('relay.components', JSON.stringify(customComponents)), [customComponents])
   useEffect(() => localStorage.setItem('relay.workflows', JSON.stringify(workflows)), [workflows])
   useEffect(() => localStorage.setItem('relay.userTemplates', JSON.stringify(userTemplates)), [userTemplates])
+  useEffect(() => localStorage.setItem('relay.catalysts', JSON.stringify(catalysts)), [catalysts])
+  useEffect(() => localStorage.setItem('relay.monitorBoard', JSON.stringify(monitorBoard)), [monitorBoard])
   useEffect(() => {
     if (pendingRun) localStorage.setItem('relay.pendingRun', JSON.stringify(pendingRun))
     else localStorage.removeItem('relay.pendingRun')
   }, [pendingRun])
+  useEffect(() => {
+    if (!pendingRun) return
+    setMonitorBoard((current) => {
+      if (current.tiles.some((tile) => tile.id === pendingRun.id)) return current
+      const workflow = workflows.find((item) => item.name === pendingRun.workflowName)
+      const group = current.groups.find((item) => item.projectName === pendingRun.projectName) ?? current.groups[0]
+      if (!group) return current
+      return {
+        ...current,
+        tiles: [...current.tiles, {
+          id: pendingRun.id,
+          groupId: group.id,
+          workflowId: workflow?.id,
+          workflowName: pendingRun.workflowName,
+          objective: pendingRun.configuration.task,
+          projectName: pendingRun.projectName,
+          status: 'waiting-runner',
+          steps: workflow?.steps ?? ['Implement', 'Review', 'Verify', 'Gate', 'Handoff'],
+          createdAt: pendingRun.createdAt,
+        }],
+      }
+    })
+  }, [pendingRun, workflows])
   useEffect(() => {
     document.documentElement.dataset.theme = theme
     localStorage.setItem('relay.theme', theme)
@@ -606,6 +672,7 @@ export default function App() {
           onWorkflowSaved={(workflow) => setWorkflows((current) => [workflow, ...current.filter((item) => item.id !== workflow.id)])}
           onPrepareRun={setPendingRun}
           startingTemplate={builderTemplate}
+          workflows={workflows}
         />
       </ReactFlowProvider>
     )
@@ -627,6 +694,11 @@ export default function App() {
       onToggleTemplatePublished={(id) => setUserTemplates((current) => current.map((template) => template.id === id ? { ...template, published: !template.published } : template))}
       onUseTemplate={(template) => { setBuilderTemplate(template); navigate('builder') }}
       pendingRun={pendingRun}
+      monitorBoard={monitorBoard}
+      onUpdateMonitorBoard={setMonitorBoard}
+      catalysts={catalysts}
+      onCreateCatalyst={(catalyst) => setCatalysts((current) => [catalyst, ...current.filter((item) => item.id !== catalyst.id)])}
+      onToggleCatalyst={(id) => setCatalysts((current) => current.map((item) => item.id === id ? { ...item, status: item.status === 'paused' ? 'awaiting-runner' : 'paused' } : item))}
     />
   )
 }

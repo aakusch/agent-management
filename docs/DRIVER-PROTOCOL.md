@@ -39,6 +39,25 @@ The driver is the only owner of graph state. Worker agents do not decide what ru
 9. Pause for human input when required.
 10. Finish with a terminal run event and an artifact index.
 
+## Catalysts
+
+A catalyst is an authenticated request to create a normal run; it is never a privileged execution shortcut. The website authors catalyst definitions, while a local daemon or hosted receiver owns the network boundary.
+
+Supported entrypoints are signed webhooks, authorized connector events, runner-managed cron schedules, and schema-limited secure queries. Before creating `run.created`, the receiver must authenticate the caller, validate the payload schema, enforce rate limits, reject replayed delivery IDs, apply an idempotency key, resolve the pinned workflow, and record sanitized catalyst provenance. Secret values stay in the OS keychain, environment, or connector vault and never enter exported workflow or catalyst JSON.
+
+See [`catalyst.schema.json`](catalyst.schema.json).
+
+## Nested workflows
+
+A node with `kind: workflow` invokes a saved workflow by `subworkflow.workflowId`. The compiler resolves the full dependency graph before execution and rejects direct self-reference, indirect cycles, missing versions, and incompatible exposed inputs or outputs.
+
+- `inline` execution shares the parent run event stream and budget.
+- `isolated` execution creates a child run with its own event stream and links it to the parent.
+- Context may be inherited, explicitly mapped, or omitted beyond the child objective.
+- Failure may bubble to the parent step, pause for a decision, or continue with a structured failure artifact.
+
+Every event from a child run includes `parentRunId` and `parentNodeId` so monitoring can collapse or expand nested workflows without losing provenance.
+
 ## On-disk run state
 
 ```text
@@ -133,3 +152,9 @@ The graph answers “where is the workflow?” Agent lanes answer “what is eac
 - a chronological event trace underneath.
 
 The UI derives everything from the event stream and never invents run state locally.
+
+## Codebase-wide monitoring
+
+The Runs board is a user-authored projection over one or more real event streams. Users arrange run tiles into named repository or package sections; arrangement is local display state and never changes driver scheduling. Each tile keeps its own objective, catalyst, parent workflow, graph state, and connection status.
+
+For concurrent runs, the runner should additionally emit `resource.locked`, `resource.waiting`, `resource.released`, and `resource.conflict` events with normalized repository-relative paths. The codebase view can then expose overlapping write scopes and blocked runs without scraping terminal text. An empty tile remains `not-started`; a prepared web run remains `waiting-runner` until the runner establishes an authenticated stream.

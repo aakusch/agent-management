@@ -41,9 +41,20 @@
               "label": { "type": "string" },
               "description": { "type": "string" },
               "templateId": { "type": "string" },
-              "kind": { "enum": ["agent", "judge", "router", "human", "tool"] },
+              "kind": { "enum": ["agent", "judge", "router", "human", "tool", "workflow"] },
               "instruction": { "type": "string" },
-              "overrides": { "type": "object", "additionalProperties": { "type": "string" } }
+              "overrides": { "type": "object", "additionalProperties": { "type": "string" } },
+              "subworkflow": {
+                "type": "object",
+                "required": ["workflowId", "execution", "context", "onFailure"],
+                "properties": {
+                  "workflowId": { "type": "string", "minLength": 1 },
+                  "execution": { "enum": ["inline", "isolated"] },
+                  "context": { "enum": ["inherit", "mapped", "none"] },
+                  "onFailure": { "enum": ["bubble", "pause", "continue"] }
+                },
+                "additionalProperties": false
+              }
             },
             "additionalProperties": true
           }

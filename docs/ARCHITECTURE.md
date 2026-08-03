@@ -56,6 +56,14 @@ See [`workflow.schema.json`](workflow.schema.json) and the example in [`../workf
 
 The handoff artifact is a self-contained `*.relay.json` file with kind `relay.assignment`. It embeds the workflow, the exact Markdown components it references, and driver policies. See [`assignment.schema.json`](assignment.schema.json), the generated [`../workflows/ui-quality-loop.relay.json`](../workflows/ui-quality-loop.relay.json), and the full [`DRIVER-PROTOCOL.md`](DRIVER-PROTOCOL.md).
 
+### Catalyst
+
+Catalysts are separately versioned entrypoint definitions, not embedded secrets. The authoring app persists their type, selector, target workflow, and required authentication mode. A receiver validates the definition in [`catalyst.schema.json`](catalyst.schema.json), resolves secret references outside the file, and emits a normal `run.created` event with catalyst provenance.
+
+### Workflow references
+
+Saved workflows may appear in the component library as `kind: workflow`. A node stores the referenced workflow ID plus execution, context, and failure policies. Compilation recursively resolves these references, validates exposed contracts, and rejects dependency cycles before any agent starts.
+
 ## Proposed runtime
 
 ### Compiler
