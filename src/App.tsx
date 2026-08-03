@@ -603,8 +603,29 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
   const stageCatalystWorkflow = useCallback(async () => {
     if (!validateWorkflow()) return
     const saved = await saveWorkflow()
-    if (saved) onNavigate('catalysts')
-  }, [onNavigate, saveWorkflow, validateWorkflow])
+    if (!saved) return
+    onPrepareRun({
+      id: `run-${Date.now()}`,
+      workflowId,
+      workflowName,
+      projectName: project.root ? project.name : undefined,
+      configuration: {
+        task: 'Objective and context will be supplied by the verified catalyst event.',
+        autonomy: 'adaptive',
+        allowAdjacentFixes: true,
+        retryFailures: true,
+        execution: 'execute',
+      },
+      createdAt: new Date().toISOString(),
+      state: 'staged',
+      preparedBy: 'catalyst',
+      graph: {
+        nodes: nodes.map((node) => ({ id: node.id, label: node.data.label, kind: node.data.kind, x: node.position.x, y: node.position.y })),
+        edges: edges.map((item) => ({ id: item.id, source: item.source, target: item.target, label: item.data?.label, tone: item.data?.tone })),
+      },
+    })
+    onNavigate('runs')
+  }, [edges, nodes, onNavigate, onPrepareRun, project.name, project.root, saveWorkflow, validateWorkflow, workflowId, workflowName])
 
   const importWorkflow = useCallback(async (file: File) => {
     try {

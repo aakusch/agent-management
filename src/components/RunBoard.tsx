@@ -25,16 +25,19 @@ import {
   WifiOff,
   Workflow,
   X,
+  Zap,
 } from 'lucide-react'
-import type { PendingRun, RelayRunEvent, RunMonitorBoard, RunMonitorStatus, RunMonitorTile, WorkflowRecord } from '../types/catalog'
+import type { CatalystDefinition, PendingRun, RelayRunEvent, RunMonitorBoard, RunMonitorStatus, RunMonitorTile, WorkflowRecord } from '../types/catalog'
 
 interface RunBoardProps {
   board: RunMonitorBoard
   workflows: WorkflowRecord[]
   stagedRuns: PendingRun[]
+  catalysts: CatalystDefinition[]
   onUpdateStagedRuns: (runs: PendingRun[]) => void
   onChange: (board: RunMonitorBoard) => void
   onOpenBuilder: () => void
+  onOpenCatalysts: () => void
 }
 
 const statusCopy: Record<RunMonitorStatus, { label: string; detail: string }> = {
@@ -343,7 +346,7 @@ function ExpandedRun({ tile, onBack, onPatch }: { tile: RunMonitorTile; onBack: 
   )
 }
 
-export function RunBoard({ board, workflows, stagedRuns, onUpdateStagedRuns, onChange, onOpenBuilder }: RunBoardProps) {
+export function RunBoard({ board, workflows, stagedRuns, catalysts, onUpdateStagedRuns, onChange, onOpenBuilder, onOpenCatalysts }: RunBoardProps) {
   const [section, setSection] = useState<'staged' | 'running'>(stagedRuns.length ? 'staged' : 'running')
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null)
   const [search, setSearch] = useState('')
@@ -406,16 +409,18 @@ export function RunBoard({ board, workflows, stagedRuns, onUpdateStagedRuns, onC
       </div>
 
       {section === 'staged' ? <section className="runs-section">
-        <div className="runs-section-heading"><div><h2>Staged workflows</h2><p>These assignments can still be edited. Run one when you are ready to attach its local driver.</p></div><button className="primary-cta small" onClick={onOpenBuilder}>Stage another workflow <ArrowRight size={13} /></button></div>
+        <div className="runs-section-heading"><div><h2>Staged workflows</h2><p>These assignments are ready for a manual launch or a verified catalyst event.</p></div><button className="primary-cta small" onClick={onOpenBuilder}>Stage another workflow <ArrowRight size={13} /></button></div>
         {stagedRuns.length ? <div className="staged-run-list">
           <div className="staged-list-header"><span>Workflow and objective</span><span>Project</span><span>Run policy</span><span>Prepared</span><span /></div>
-          {stagedRuns.map((run) => <article className="staged-run-row" key={run.id}>
-            <div className="staged-run-name"><span><Workflow size={15} /></span><div><strong>{run.workflowName}</strong><p>{run.configuration.task}</p></div></div>
+          {stagedRuns.map((run) => {
+            const catalyst = run.preparedBy === 'catalyst' ? catalysts.find((item) => item.workflowId === run.workflowId) : undefined
+            return <article className={`staged-run-row ${run.preparedBy === 'catalyst' ? 'catalyst-staged' : ''}`} key={run.id}>
+            <div className="staged-run-name"><span>{run.preparedBy === 'catalyst' ? <Zap size={15} /> : <Workflow size={15} />}</span><div><strong>{run.workflowName}</strong><p>{run.configuration.task}</p></div></div>
             <span>{run.projectName || 'No project'}</span>
-            <div className="run-policy"><span>{run.configuration.autonomy}</span><span>{run.configuration.execution === 'dry-run' ? 'dry run' : 'execute'}</span></div>
+            <div className="run-policy">{run.preparedBy === 'catalyst' ? <><span>Catalyst event</span><span>{catalyst ? catalyst.status === 'paused' ? 'paused' : 'configured' : 'setup required'}</span></> : <><span>{run.configuration.autonomy}</span><span>{run.configuration.execution === 'dry-run' ? 'dry run' : 'execute'}</span></>}</div>
             <time>{new Date(run.createdAt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</time>
-            <div className="staged-actions"><button onClick={onOpenBuilder}>Edit</button><button className="start-staged" onClick={() => startStaged(run)}><Play size={12} /> Run workflow</button><button className="remove-staged" onClick={() => onUpdateStagedRuns(stagedRuns.filter((item) => item.id !== run.id))} aria-label={`Delete ${run.workflowName} staged run`}><Trash2 size={13} /></button></div>
-          </article>)}
+            <div className="staged-actions"><button onClick={onOpenBuilder}>Edit</button>{run.preparedBy === 'catalyst' ? catalyst && catalyst.status !== 'paused' ? <span className="catalyst-waiting"><Radio size={12} /> Waiting for event</span> : <button className="start-staged" onClick={onOpenCatalysts}><Zap size={12} /> {catalyst ? 'Enable catalyst' : 'Configure catalyst'}</button> : <button className="start-staged" onClick={() => startStaged(run)}><Play size={12} /> Run workflow</button>}<button className="remove-staged" onClick={() => onUpdateStagedRuns(stagedRuns.filter((item) => item.id !== run.id))} aria-label={`Delete ${run.workflowName} staged run`}><Trash2 size={13} /></button></div>
+          </article>})}
         </div> : <div className="runs-empty"><FileJson2 size={24} /><h2>No staged workflows</h2><p>Use the builder to define an objective and run policy. Relay will hold the assignment here until you start it.</p><button className="primary-cta small" onClick={onOpenBuilder}>Open builder</button></div>}
       </section> : <section className="runs-section">
         <div className="running-toolbar">
