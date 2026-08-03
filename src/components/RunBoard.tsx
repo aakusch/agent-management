@@ -11,12 +11,18 @@ import {
   Copy,
   FileJson2,
   FolderGit2,
+  KeyRound,
+  Link2,
+  LoaderCircle,
   Pause,
   Play,
   Radio,
   Search,
+  Server,
+  ShieldCheck,
   TerminalSquare,
   Trash2,
+  WifiOff,
   Workflow,
   X,
 } from 'lucide-react'
@@ -167,6 +173,8 @@ function ExpandedRun({ tile, onBack, onPatch }: { tile: RunMonitorTile; onBack: 
   const [streamUrl, setStreamUrl] = useState('')
   const [events, setEvents] = useState<RelayRunEvent[]>([])
   const [filter, setFilter] = useState<'all' | 'agent' | 'tools' | 'decisions'>('all')
+  const [tokenOpen, setTokenOpen] = useState(false)
+  const [commandCopied, setCommandCopied] = useState(false)
   const eventEnd = useRef<HTMLDivElement>(null)
   const patchRef = useRef(onPatch)
   patchRef.current = onPatch
@@ -194,7 +202,9 @@ function ExpandedRun({ tile, onBack, onPatch }: { tile: RunMonitorTile; onBack: 
     return () => source.close()
   }, [streamUrl])
 
-  useEffect(() => { eventEnd.current?.scrollIntoView({ block: 'nearest' }) }, [events])
+  useEffect(() => {
+    if (events.length) eventEnd.current?.scrollIntoView({ block: 'nearest' })
+  }, [events])
 
   const connect = () => {
     const base = observerUrl.trim().replace(/\/$/, '')
@@ -208,10 +218,33 @@ function ExpandedRun({ tile, onBack, onPatch }: { tile: RunMonitorTile; onBack: 
     } catch { setConnection('error') }
   }
 
-  const sendControl = async (control: 'pause' | 'resume' | 'cancel') => {
-    const base = observerUrl.trim().replace(/\/$/, '')
-    if (!base) return
+  const disconnect = () => {
+    setStreamUrl('')
+    setConnection('idle')
+  }
+
+  const pasteObserver = async () => {
     try {
+      const value = await navigator.clipboard.readText()
+      if (value.trim()) setObserverUrl(value.trim())
+    } catch { /* Clipboard access remains an optional convenience. */ }
+  }
+
+  const copyConnectCommand = async () => {
+    try {
+      await navigator.clipboard.writeText(`relay connect --run ${tile.id}`)
+      setCommandCopied(true)
+      window.setTimeout(() => setCommandCopied(false), 1800)
+    } catch { /* The command remains selectable if clipboard permission is unavailable. */ }
+  }
+
+  const sendControl = async (control: 'pause' | 'resume' | 'cancel') => {
+    const observer = observerUrl.trim().replace(/\/$/, '')
+    if (!observer) return
+    try {
+      const parsed = new URL(observer)
+      const runPath = parsed.pathname.indexOf('/v1/runs/')
+      const base = runPath >= 0 ? `${parsed.origin}${parsed.pathname.slice(0, runPath)}` : observer
       const response = await fetch(`${base}/v1/runs/${encodeURIComponent(tile.id)}/${control}`, {
         method: 'POST',
         headers: token.trim() ? { Authorization: `Bearer ${token.trim()}` } : {},
@@ -227,6 +260,15 @@ function ExpandedRun({ tile, onBack, onPatch }: { tile: RunMonitorTile; onBack: 
     return true
   })
   const copy = statusCopy[tile.status]
+  const liveAgentIds = new Set<string>()
+  events.forEach((event) => {
+    if (!event.agentId) return
+    if (event.type === 'agent.stopped') liveAgentIds.delete(event.agentId)
+    else liveAgentIds.add(event.agentId)
+  })
+  const activeAgents = liveAgentIds.size
+  const latestNode = [...events].reverse().find((event) => event.nodeId)?.nodeId
+  const connectionLabel = connection === 'live' ? 'Connected' : connection === 'connecting' ? 'Connecting' : connection === 'error' ? 'Unavailable' : 'Disconnected'
 
   return (
     <div className="run-detail">
@@ -244,11 +286,18 @@ function ExpandedRun({ tile, onBack, onPatch }: { tile: RunMonitorTile; onBack: 
         <div className="run-detail-meta"><span><FolderGit2 size={13} /> {tile.projectName || 'No project'}</span><span><Radio size={13} /> {connection === 'live' ? 'Runner connected' : connection === 'connecting' ? 'Connecting…' : connection === 'error' ? 'Runner unavailable' : 'Runner disconnected'}</span></div>
       </header>
 
-      <div className="runner-connect">
-        <div><strong>Runner observer</strong><span>Connect to the loopback API printed by the Relay CLI. The capability token stays in this tab.</span></div>
-        <input value={observerUrl} onChange={(event) => setObserverUrl(event.target.value)} placeholder="http://127.0.0.1:4317" aria-label="Runner observer URL" />
-        <input value={token} onChange={(event) => setToken(event.target.value)} placeholder="Capability token (optional)" type="password" aria-label="Runner capability token" />
-        <button className="primary-cta small" onClick={connect} disabled={!observerUrl.trim()}><Radio size={13} /> {streamUrl ? 'Reconnect' : 'Connect stream'}</button>
+      <div className={`runner-connect state-${connection}`}>
+        <div className="runner-connect-status">
+          <span className="runner-status-icon">{connection === 'connecting' ? <LoaderCircle className="spin" size={16} /> : connection === 'error' ? <WifiOff size={16} /> : <Server size={16} />}</span>
+          <div><strong>Runner connection</strong><span>{connection === 'live' ? 'Secure event stream attached to this run.' : connection === 'error' ? 'The observer did not respond. Check the URL and local CLI.' : 'Paste the observer or signed stream URL printed by the Relay CLI.'}</span></div>
+          <em><i /> {connectionLabel}</em>
+        </div>
+        <div className="runner-connect-form">
+          <label className="observer-field"><span><Link2 size={11} /> Observer URL</span><div><input value={observerUrl} onChange={(event) => setObserverUrl(event.target.value)} placeholder="http://127.0.0.1:4317 or signed /events URL" aria-label="Runner observer URL" /><button type="button" onClick={() => void pasteObserver()}><Copy size={12} /> Paste</button></div></label>
+          {tokenOpen && <label className="token-field"><span><KeyRound size={11} /> Capability token</span><input value={token} onChange={(event) => setToken(event.target.value)} placeholder="Kept only in this browser tab" type="password" aria-label="Runner capability token" /></label>}
+          <button className={`token-toggle ${tokenOpen ? 'active' : ''}`} onClick={() => setTokenOpen((current) => !current)}><KeyRound size={12} /> {tokenOpen ? 'Hide token' : 'Add token'}</button>
+          {streamUrl ? <button className="disconnect-runner" onClick={disconnect}><WifiOff size={13} /> Disconnect</button> : <button className="primary-cta small connect-runner" onClick={connect} disabled={!observerUrl.trim()}><Radio size={13} /> Connect runner</button>}
+        </div>
       </div>
 
       <div className="run-split-view">
@@ -260,6 +309,11 @@ function ExpandedRun({ tile, onBack, onPatch }: { tile: RunMonitorTile; onBack: 
 
         <section className="agent-stream-panel">
           <div className="run-panel-heading"><div><span className="eyebrow">Agent stream</span><h2>Live activity</h2></div><span>{events.length} events</span></div>
+          <div className="stream-status-rail">
+            <span><i className={`connection-${connection}`} /> <small>Driver</small><strong>{connectionLabel}</strong></span>
+            <span><i /> <small>Agents</small><strong>{activeAgents || '—'}</strong></span>
+            <span><i /> <small>Current node</small><strong>{latestNode || '—'}</strong></span>
+          </div>
           <div className="stream-filters">
             {(['all', 'agent', 'tools', 'decisions'] as const).map((value) => <button key={value} className={filter === value ? 'active' : ''} onClick={() => setFilter(value)}>{value}</button>)}
           </div>
@@ -268,7 +322,19 @@ function ExpandedRun({ tile, onBack, onPatch }: { tile: RunMonitorTile; onBack: 
               <time>{formatTime(event.time)}</time>
               <span className="event-seq">#{event.seq}</span>
               <div><strong>{event.type}</strong><p>{event.payload?.summary || event.payload?.command || event.payload?.tool || event.payload?.route || 'State updated'}</p><small>{[event.agentId, event.nodeId && `node: ${event.nodeId}`, event.attempt && `attempt ${event.attempt}`].filter(Boolean).join(' · ')}</small></div>
-            </article>) : <div className="stream-empty"><TerminalSquare size={22} /><strong>{streamUrl ? 'Waiting for the first runner event' : 'Connect a runner to see the agent work'}</strong><span>Relay displays the append-only event stream. It does not invent terminal output or workflow state.</span><code>relay connect --run {tile.id}</code></div>}
+            </article>) : events.length ? <div className="stream-empty compact"><Search size={20} /><strong>No events in this filter</strong><span>Choose another activity filter to return to the full event stream.</span></div> : <div className={`stream-empty connection-${connection}`}>
+              <span className="stream-empty-icon">{connection === 'connecting' ? <LoaderCircle className="spin" size={21} /> : connection === 'error' ? <WifiOff size={21} /> : connection === 'live' ? <Radio size={21} /> : <TerminalSquare size={21} />}</span>
+              <strong>{connection === 'connecting' ? 'Opening the event stream' : connection === 'error' ? 'Couldn’t reach this runner' : connection === 'live' ? 'Connected—waiting for activity' : 'Attach the local runner'}</strong>
+              <span>{connection === 'error' ? 'Confirm the Relay CLI is running and use the exact observer URL it printed.' : connection === 'live' ? 'The connection is healthy. Agent and tool events will appear here as execution begins.' : 'Run the connection command in the project terminal, then paste its observer URL above.'}</span>
+              {connection === 'idle' && <div className="stream-setup">
+                <div><em>1</em><span><strong>Start the driver</strong><small>Use the same run identifier shown here.</small></span></div>
+                <button onClick={() => void copyConnectCommand()}><code>relay connect --run {tile.id}</code><span>{commandCopied ? <Check size={12} /> : <Copy size={12} />} {commandCopied ? 'Copied' : 'Copy'}</span></button>
+                <div><em>2</em><span><strong>Paste its observer URL</strong><small>Tokens remain in this tab and are never saved.</small></span></div>
+                <div><em>3</em><span><strong>Connect the runner</strong><small>The append-only SSE feed becomes this activity view.</small></span></div>
+              </div>}
+              {connection === 'error' && <button className="stream-retry" onClick={connect} disabled={!observerUrl.trim()}><Radio size={12} /> Try again</button>}
+              <div className="stream-trust"><ShieldCheck size={12} /> The UI derives state only from signed runner events.</div>
+            </div>}
             <div ref={eventEnd} />
           </div>
         </section>
