@@ -11,6 +11,7 @@
     "workflowId": { "type": "string", "minLength": 1 },
     "workflowName": { "type": "string", "minLength": 1 },
     "selector": { "type": "string", "minLength": 1 },
+    "settings": { "type": "object", "additionalProperties": { "type": "string" } },
     "security": { "enum": ["hmac", "connector-oauth", "runner-token"] },
     "status": { "enum": ["awaiting-runner", "paused"] },
     "createdAt": { "type": "string", "format": "date-time" }

@@ -103,6 +103,7 @@ const isCatalystList = (value: unknown): value is CatalystDefinition[] => Array.
   && typeof item.name === 'string'
   && typeof item.workflowId === 'string'
   && ['signed-webhook', 'connector-event', 'cron', 'secure-query'].includes(String(item.kind))
+  && (item.settings === undefined || (isRecord(item.settings) && Object.values(item.settings).every((setting) => typeof setting === 'string')))
   && ['awaiting-runner', 'paused'].includes(String(item.status)),
 )
 
@@ -203,6 +204,7 @@ function nodeFromTemplate(
       instruction: template.instruction,
       overrides: {},
       execution: {},
+      catalyst: template.kind === 'catalyst' ? {} : undefined,
       subworkflow: template.workflowId ? {
         workflowId: template.workflowId,
         execution: 'isolated',
@@ -274,6 +276,8 @@ interface WorkspaceProps {
   onPrepareRun: (run: PendingRun) => void
   startingTemplate?: WorkflowTemplate
   workflows: WorkflowRecord[]
+  catalysts: CatalystDefinition[]
+  onToggleCatalyst: (id: string) => void
 }
 
 function graphFromTemplate(template: WorkflowTemplate | undefined, components: ComponentTemplate[]) {
@@ -320,7 +324,7 @@ function graphFromTemplate(template: WorkflowTemplate | undefined, components: C
   return { nodes, edges }
 }
 
-function Workspace({ project, onUpdateProject, components, onImportComponents, onNavigate, theme, onToggleTheme, onWorkflowSaved, onPrepareRun, startingTemplate, workflows }: WorkspaceProps) {
+function Workspace({ project, onUpdateProject, components, onImportComponents, onNavigate, theme, onToggleTheme, onWorkflowSaved, onPrepareRun, startingTemplate, workflows, catalysts, onToggleCatalyst }: WorkspaceProps) {
   const expectedWorkflowId = startingTemplate?.id ?? 'implementation-quality-loop'
   const [startingDocument] = useState<WorkflowDocument | null>(() => readStored<WorkflowDocument | null>(
     'relay.workflow', null, (value): value is WorkflowDocument | null => value === null || isWorkflowDocument(value),
@@ -747,9 +751,13 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
           node={selectedNode}
           project={project}
           sourceInstruction={selectedNode ? componentLookup[selectedNode.data.templateId]?.instruction ?? selectedNode.data.instruction : ''}
+          catalysts={catalysts}
+          workflowId={workflowId}
           onClose={() => setSelectedNodeId(null)}
           onUpdateNode={updateNode}
           onOpenProjectConfig={() => void openProjectConfig()}
+          onOpenCatalysts={() => void primeCatalyst()}
+          onToggleCatalyst={onToggleCatalyst}
         />
         <TransitionInspector
           edge={selectedEdge}
@@ -875,6 +883,8 @@ export default function App() {
           onPrepareRun={setPendingRun}
           startingTemplate={builderTemplate}
           workflows={workflows}
+          catalysts={catalysts}
+          onToggleCatalyst={(id) => setCatalysts((current) => current.map((item) => item.id === id ? { ...item, status: item.status === 'paused' ? 'awaiting-runner' : 'paused' } : item))}
         />
       </ReactFlowProvider>
     )

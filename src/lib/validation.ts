@@ -97,6 +97,8 @@ export function isWorkflowDocument(value: unknown): value is WorkflowDocument {
       || (node.data.execution.model !== undefined && typeof node.data.execution.model !== 'string')
       || (node.data.execution.effort !== undefined && (typeof node.data.execution.effort !== 'string' || !reasoningEfforts.has(node.data.execution.effort)))
       || (node.data.execution.tools !== undefined && (!Array.isArray(node.data.execution.tools) || !node.data.execution.tools.every((tool) => typeof tool === 'string' && relayTools.has(tool) && (!projectTools || projectTools.has(tool))))))) return false
+    if (node.data.catalyst !== undefined && (!isRecord(node.data.catalyst)
+      || (node.data.catalyst.definitionId !== undefined && typeof node.data.catalyst.definitionId !== 'string'))) return false
     nodeIds.add(node.id)
   }
 

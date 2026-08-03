@@ -43,6 +43,7 @@ import {
 import type { ComponentKind, ComponentTemplate, ProjectContext, ReasoningEffort, RelayTool } from '../types/workflow'
 import type { CatalystDefinition, CatalystKind, PendingRun, RunMonitorBoard, WorkflowRecord, WorkflowTemplate } from '../types/catalog'
 import { RunBoard } from './RunBoard'
+import { describeCatalyst } from '../lib/catalysts'
 
 export type AppPage = 'dashboard' | 'builder' | 'workflows' | 'components' | 'projects' | 'templates' | 'catalysts' | 'runs'
 
@@ -434,17 +435,48 @@ function TemplatesPage({ templates, onCreate, onTogglePublished, onUseTemplate }
   </div>
 }
 
-const catalystKinds: Record<CatalystKind, { label: string; detail: string; placeholder: string; security: CatalystDefinition['security']; Icon: typeof Zap }> = {
-  'signed-webhook': { label: 'Signed webhook', detail: 'Receive an HMAC-verified event from an external system.', placeholder: 'POST /hooks/github-pr', security: 'hmac', Icon: Webhook },
-  'connector-event': { label: 'Connector event', detail: 'Subscribe through an authorized GitHub, Slack, or issue connector.', placeholder: 'github.pull_request.opened', security: 'connector-oauth', Icon: Cable },
-  cron: { label: 'Schedule', detail: 'Ask the connected runner to start on a recurring schedule.', placeholder: '0 9 * * 1-5', security: 'runner-token', Icon: Clock3 },
-  'secure-query': { label: 'Secure query', detail: 'Expose an authenticated, schema-limited workflow request.', placeholder: 'query: dependency-risk', security: 'runner-token', Icon: KeyRound },
+const catalystKinds: Record<CatalystKind, { label: string; detail: string; security: CatalystDefinition['security']; Icon: typeof Zap }> = {
+  'signed-webhook': { label: 'Signed webhook', detail: 'Receive a verified event from an external system.', security: 'hmac', Icon: Webhook },
+  'connector-event': { label: 'Connector event', detail: 'Subscribe through an authorized workspace connector.', security: 'connector-oauth', Icon: Cable },
+  cron: { label: 'Schedule', detail: 'Start from a simple runner-managed schedule.', security: 'runner-token', Icon: Clock3 },
+  'secure-query': { label: 'Secure query', detail: 'Accept an authenticated, schema-limited request.', security: 'runner-token', Icon: KeyRound },
+}
+
+const defaultCatalystSettings = {
+  provider: 'github',
+  webhookEvent: 'pull_request.opened',
+  connector: 'github',
+  connectorEvent: 'pull_request.opened',
+  frequency: 'weekdays',
+  time: '09:00',
+  timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+  request: 'repository-audit',
+  scope: 'workspace',
+}
+
+const webhookEvents: Record<string, { value: string; label: string }[]> = {
+  github: [{ value: 'pull_request.opened', label: 'Pull request opened' }, { value: 'pull_request.synchronize', label: 'Pull request updated' }, { value: 'push', label: 'Code pushed' }],
+  stripe: [{ value: 'payment_intent.succeeded', label: 'Payment succeeded' }, { value: 'invoice.payment_failed', label: 'Payment failed' }, { value: 'customer.subscription.updated', label: 'Subscription updated' }],
+  custom: [{ value: 'event.received', label: 'Any verified event' }],
+}
+
+const connectorEvents: Record<string, { value: string; label: string }[]> = {
+  github: webhookEvents.github,
+  linear: [{ value: 'issue.created', label: 'Issue created' }, { value: 'issue.updated', label: 'Issue updated' }, { value: 'comment.created', label: 'Comment added' }],
+  slack: [{ value: 'message.mentioned', label: 'App mentioned' }, { value: 'reaction.added', label: 'Reaction added' }, { value: 'shortcut.used', label: 'Shortcut used' }],
+}
+
+const catalystSelector = (kind: CatalystKind, settings: typeof defaultCatalystSettings) => {
+  if (kind === 'signed-webhook') return `${settings.provider}:${settings.webhookEvent}`
+  if (kind === 'connector-event') return `${settings.connector}.${settings.connectorEvent}`
+  if (kind === 'cron') return `schedule:${settings.frequency}:${settings.time}:${settings.timezone}`
+  return `query:${settings.request}:${settings.scope}`
 }
 
 function CatalystsPage({ catalysts, workflows, onCreate, onToggle }: { catalysts: CatalystDefinition[]; workflows: WorkflowRecord[]; onCreate: (catalyst: CatalystDefinition) => void; onToggle: (id: string) => void }) {
   const primedWorkflows = workflows.filter((workflow) => workflow.entryMode === 'catalyst')
   const [creating, setCreating] = useState(false)
-  const [draft, setDraft] = useState({ name: '', kind: 'connector-event' as CatalystKind, workflowId: '', selector: '' })
+  const [draft, setDraft] = useState({ name: '', kind: 'connector-event' as CatalystKind, workflowId: '', settings: { ...defaultCatalystSettings } })
   const kind = catalystKinds[draft.kind]
   const openCreator = () => {
     if (!primedWorkflows.length) return
@@ -453,17 +485,33 @@ function CatalystsPage({ catalysts, workflows, onCreate, onToggle }: { catalysts
   }
   const create = () => {
     const workflow = primedWorkflows.find((item) => item.id === draft.workflowId)
-    if (!workflow || !draft.name.trim() || !draft.selector.trim()) return
+    if (!workflow || !draft.name.trim()) return
     const id = draft.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
-    onCreate({ id, name: draft.name.trim(), kind: draft.kind, workflowId: workflow.id, workflowName: workflow.name, selector: draft.selector.trim(), security: kind.security, status: 'awaiting-runner', createdAt: new Date().toISOString() })
+    onCreate({ id, name: draft.name.trim(), kind: draft.kind, workflowId: workflow.id, workflowName: workflow.name, selector: catalystSelector(draft.kind, draft.settings), settings: draft.settings, security: kind.security, status: 'awaiting-runner', createdAt: new Date().toISOString() })
     setCreating(false)
-    setDraft({ name: '', kind: 'connector-event', workflowId: '', selector: '' })
+    setDraft({ name: '', kind: 'connector-event', workflowId: '', settings: { ...defaultCatalystSettings } })
   }
+
+  const updateSetting = (key: keyof typeof defaultCatalystSettings, value: string) => setDraft((current) => ({ ...current, settings: { ...current.settings, [key]: value } }))
+  const guidedFields = draft.kind === 'signed-webhook' ? <div className="catalyst-guided-fields">
+    <label><span>Service</span><select value={draft.settings.provider} onChange={(event) => { const provider = event.target.value; setDraft((current) => ({ ...current, settings: { ...current.settings, provider, webhookEvent: webhookEvents[provider][0].value } })) }}><option value="github">GitHub</option><option value="stripe">Stripe</option><option value="custom">Custom service</option></select></label>
+    <label><span>Event</span><select value={draft.settings.webhookEvent} onChange={(event) => updateSetting('webhookEvent', event.target.value)}>{webhookEvents[draft.settings.provider].map((event) => <option key={event.value} value={event.value}>{event.label}</option>)}</select></label>
+  </div> : draft.kind === 'connector-event' ? <div className="catalyst-guided-fields">
+    <label><span>Connector</span><select value={draft.settings.connector} onChange={(event) => { const connector = event.target.value; setDraft((current) => ({ ...current, settings: { ...current.settings, connector, connectorEvent: connectorEvents[connector][0].value } })) }}><option value="github">GitHub</option><option value="linear">Linear</option><option value="slack">Slack</option></select></label>
+    <label><span>Event</span><select value={draft.settings.connectorEvent} onChange={(event) => updateSetting('connectorEvent', event.target.value)}>{connectorEvents[draft.settings.connector].map((event) => <option key={event.value} value={event.value}>{event.label}</option>)}</select></label>
+  </div> : draft.kind === 'cron' ? <div className="catalyst-guided-fields">
+    <label><span>Repeats</span><select value={draft.settings.frequency} onChange={(event) => updateSetting('frequency', event.target.value)}><option value="hourly">Every hour</option><option value="daily">Every day</option><option value="weekdays">Every weekday</option><option value="weekly">Every week</option></select></label>
+    <label><span>Start time</span><input type="time" value={draft.settings.time} onChange={(event) => updateSetting('time', event.target.value)} disabled={draft.settings.frequency === 'hourly'} /></label>
+    <label className="full"><span>Timezone</span><select value={draft.settings.timezone} onChange={(event) => updateSetting('timezone', event.target.value)}>{[...new Set([defaultCatalystSettings.timezone, 'UTC', 'America/New_York', 'America/Chicago', 'America/Los_Angeles', 'Europe/London'])].map((timezone) => <option key={timezone} value={timezone}>{timezone.replaceAll('_', ' ')}</option>)}</select></label>
+  </div> : <div className="catalyst-guided-fields">
+    <label><span>Request type</span><select value={draft.settings.request} onChange={(event) => updateSetting('request', event.target.value)}><option value="repository-audit">Repository audit</option><option value="dependency-risk">Dependency risk review</option><option value="release-readiness">Release readiness check</option><option value="custom-objective">Schema-limited objective</option></select></label>
+    <label><span>Who may request it</span><select value={draft.settings.scope} onChange={(event) => updateSetting('scope', event.target.value)}><option value="workspace">Workspace members</option><option value="service-account">Approved service account</option><option value="runner-token">Runner token holders</option></select></label>
+  </div>
 
   return <div className="page-wrap"><PageHeading eyebrow="Workflow entrypoints" title="Catalysts" description="Define what may start a workflow. Relay verifies the event at the receiver, records its provenance, then creates a normal auditable run." action={<button className="primary-cta" disabled={!primedWorkflows.length} title={!primedWorkflows.length ? 'Add and connect a Catalyst component in a workflow first' : undefined} onClick={openCreator}><Plus size={15} /> New catalyst</button>} />
     {!primedWorkflows.length && <section className="catalyst-prerequisite"><Zap size={17} /><div><strong>Prime a workflow first</strong><span>Add the Catalyst component as the first node, connect it to the first executable step, then save the workflow. Workflows without it remain manual.</span></div></section>}
-    {creating && <section className="surface catalyst-create"><div className="editor-title"><div><span className="eyebrow">Secure entrypoint</span><h2>Configure a catalyst</h2></div><button className="icon-button" onClick={() => setCreating(false)}><X size={16} /></button></div><div className="catalyst-create-grid"><div className="catalyst-kind-grid">{(Object.entries(catalystKinds) as [CatalystKind, typeof kind][]).map(([id, option]) => { const Icon = option.Icon; return <button className={draft.kind === id ? 'selected' : ''} key={id} onClick={() => setDraft({ ...draft, kind: id })}><Icon size={17} /><strong>{option.label}</strong><small>{option.detail}</small></button> })}</div><div className="editor-form catalyst-fields"><label><span>Name</span><input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="PR quality check" /></label><label><span>Primed workflow</span><select value={draft.workflowId} onChange={(event) => setDraft({ ...draft, workflowId: event.target.value })}>{primedWorkflows.map((workflow) => <option value={workflow.id} key={workflow.id}>{workflow.name}</option>)}</select></label><label><span>Event, schedule, or query selector</span><input className="source-editor" value={draft.selector} onChange={(event) => setDraft({ ...draft, selector: event.target.value })} placeholder={kind.placeholder} /></label><div className="catalyst-security"><ShieldCheck size={16} /><div><strong>{kind.security === 'hmac' ? 'HMAC signature required' : kind.security === 'connector-oauth' ? 'Connector authorization required' : 'Runner token required'}</strong><span>Secrets are referenced by name and resolved by the receiver. They are never stored in workflow JSON.</span></div></div><div className="editor-actions"><button className="secondary-cta" onClick={() => setCreating(false)}>Cancel</button><button className="primary-cta" onClick={create} disabled={!draft.name.trim() || !draft.selector.trim() || !draft.workflowId}>Save catalyst</button></div></div></div></section>}
-    {catalysts.length ? <div className="catalyst-list">{catalysts.map((catalyst) => { const option = catalystKinds[catalyst.kind]; const Icon = option.Icon; return <article className="surface catalyst-card" key={catalyst.id}><span className="catalyst-card-icon"><Icon size={18} /></span><div className="catalyst-card-main"><div><span className="eyebrow">{option.label}</span><h2>{catalyst.name}</h2></div><p>{catalyst.selector}</p><div className="catalyst-route"><span><Zap size={12} /> {catalyst.workflowName}</span><ArrowRight size={12} /><span><ShieldCheck size={12} /> {catalyst.security}</span></div></div><div className="catalyst-card-state"><span className={`status-chip ${catalyst.status === 'paused' ? 'draft' : 'ready'}`}><i /> {catalyst.status === 'paused' ? 'Paused' : 'Awaiting receiver'}</span><button className="secondary-cta" onClick={() => onToggle(catalyst.id)}>{catalyst.status === 'paused' ? 'Enable' : 'Pause'}</button></div></article> })}</div> : <section className="surface catalyst-empty"><span><Webhook size={22} /></span><h2>No catalysts configured</h2><p>Create a signed hook, connector subscription, schedule, or secure query. Nothing listens publicly until a Relay receiver is connected and authorized.</p><button className="secondary-cta" disabled={!primedWorkflows.length} onClick={openCreator}>Configure first catalyst <ArrowRight size={13} /></button></section>}
+    {creating && <section className="surface catalyst-create"><div className="editor-title"><div><span className="eyebrow">Secure entrypoint</span><h2>Configure a catalyst</h2></div><button className="icon-button" onClick={() => setCreating(false)}><X size={16} /></button></div><div className="catalyst-create-grid"><div className="catalyst-kind-grid">{(Object.entries(catalystKinds) as [CatalystKind, typeof kind][]).map(([id, option]) => { const Icon = option.Icon; return <button className={draft.kind === id ? 'selected' : ''} key={id} onClick={() => setDraft({ ...draft, kind: id })}><Icon size={17} /><strong>{option.label}</strong><small>{option.detail}</small></button> })}</div><div className="editor-form catalyst-fields"><label><span>Name</span><input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="PR quality check" /></label><label><span>Primed workflow</span><select value={draft.workflowId} onChange={(event) => setDraft({ ...draft, workflowId: event.target.value })}>{primedWorkflows.map((workflow) => <option value={workflow.id} key={workflow.id}>{workflow.name}</option>)}</select></label>{guidedFields}<div className="catalyst-security"><ShieldCheck size={16} /><div><strong>{kind.security === 'hmac' ? 'HMAC signature required' : kind.security === 'connector-oauth' ? 'Connector authorization required' : 'Runner token required'}</strong><span>Secrets are referenced by name and resolved by the receiver. They are never stored in workflow JSON.</span></div></div><div className="editor-actions"><button className="secondary-cta" onClick={() => setCreating(false)}>Cancel</button><button className="primary-cta" onClick={create} disabled={!draft.name.trim() || !draft.workflowId}>Save catalyst</button></div></div></div></section>}
+    {catalysts.length ? <div className="catalyst-list">{catalysts.map((catalyst) => { const option = catalystKinds[catalyst.kind]; const Icon = option.Icon; return <article className="surface catalyst-card" key={catalyst.id}><span className="catalyst-card-icon"><Icon size={18} /></span><div className="catalyst-card-main"><div><span className="eyebrow">{option.label}</span><h2>{catalyst.name}</h2></div><p>{describeCatalyst(catalyst)}</p><div className="catalyst-route"><span><Zap size={12} /> {catalyst.workflowName}</span><ArrowRight size={12} /><span><ShieldCheck size={12} /> {catalyst.security}</span></div></div><div className="catalyst-card-state"><span className={`status-chip ${catalyst.status === 'paused' ? 'draft' : 'ready'}`}><i /> {catalyst.status === 'paused' ? 'Paused' : 'Awaiting receiver'}</span><button className="secondary-cta" onClick={() => onToggle(catalyst.id)}>{catalyst.status === 'paused' ? 'Enable' : 'Pause'}</button></div></article> })}</div> : <section className="surface catalyst-empty"><span><Webhook size={22} /></span><h2>No catalysts configured</h2><p>Create a signed hook, connector subscription, schedule, or secure query. Nothing listens publicly until a Relay receiver is connected and authorized.</p><button className="secondary-cta" disabled={!primedWorkflows.length} onClick={openCreator}>Configure first catalyst <ArrowRight size={13} /></button></section>}
     <section className="catalyst-boundary"><ShieldCheck size={17} /><div><strong>Receiver boundary</strong><span>The website authors catalyst definitions. A local daemon or hosted Relay receiver performs signature checks, connector authentication, replay protection, rate limits, and idempotency before creating a run.</span></div></section>
   </div>
 }

@@ -73,6 +73,7 @@ export interface CatalystDefinition {
   workflowId: string
   workflowName: string
   selector: string
+  settings?: Record<string, string>
   security: 'hmac' | 'connector-oauth' | 'runner-token'
   status: 'awaiting-runner' | 'paused'
   createdAt: string

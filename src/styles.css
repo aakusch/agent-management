@@ -321,6 +321,23 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .platform-entry-details strong { color: #aeb7c0; font-size: 9px; font-weight: 560; }
 .platform-entry-hint { margin: 0; padding: 0 2px; color: #606b76; font-size: 8px; line-height: 1.55; }
 .platform-entry-hint strong { color: #b68b57; }
+.catalyst-binding-card { padding: 12px; }
+.catalyst-binding-card > label { margin-top: 12px; display: flex; flex-direction: column; gap: 6px; }
+.catalyst-binding-card > label > span { color: #69747f; font-size: 8px; }
+.catalyst-binding-card select { width: 100%; padding: 8px 9px; color: #aeb7c0; border: 1px solid #29323b; border-radius: 6px; outline: 0; background: #0d1116; font-size: 9px; }
+.bound-catalyst-summary { margin-top: 8px; padding: 10px; display: flex; align-items: center; gap: 8px; border: 1px solid #262e37; border-radius: 7px; background: #0b0f13; }
+.bound-catalyst-summary > span { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 3px; }
+.bound-catalyst-summary strong { color: #aab3bc; font-size: 8px; font-weight: 600; text-transform: capitalize; }
+.bound-catalyst-summary small { overflow: hidden; color: #5f6b76; font: 7px ui-monospace, SFMono-Regular, Menlo, monospace; text-overflow: ellipsis; white-space: nowrap; }
+.switch-control { display: flex; align-items: center; gap: 6px; color: #6b7681; font-size: 8px; cursor: pointer; }
+.switch-control input { position: absolute; opacity: 0; pointer-events: none; }
+.switch-control i { width: 24px; height: 14px; position: relative; border-radius: 99px; background: #343d46; transition: background .15s; }
+.switch-control i::after { content: ''; position: absolute; width: 10px; height: 10px; top: 2px; left: 2px; border-radius: 50%; background: #7f8993; transition: transform .15s, background .15s; }
+.switch-control input:checked + i { background: rgba(98, 215, 155, .32); }
+.switch-control input:checked + i::after { transform: translateX(10px); background: var(--mint); }
+.catalyst-manage-button { width: 100%; margin-top: 8px; justify-content: center; }
+.catalyst-binding-empty { margin-top: 11px; padding: 11px; border: 1px dashed #303944; border-radius: 7px; text-align: center; }
+.catalyst-binding-empty p { margin: 0 0 9px; color: #68737e; font-size: 8px; line-height: 1.5; }
 
 .workflow-node {
   position: relative;
@@ -659,6 +676,10 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .catalyst-kind-grid strong { color: #b7c0c9; font-size: 10px; }
 .catalyst-kind-grid small { color: #606b76; font-size: 8px; line-height: 1.45; }
 .catalyst-fields { padding: 14px; border: 1px solid #252d35; border-radius: 8px; background: #0b0f13; }
+.catalyst-guided-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.catalyst-guided-fields label { min-width: 0; }
+.catalyst-guided-fields label.full { grid-column: 1 / -1; }
+.catalyst-guided-fields input:disabled { color: #4f5963; cursor: not-allowed; opacity: .55; }
 .catalyst-security { padding: 10px; display: flex; align-items: flex-start; gap: 9px; color: #6fbb91; border: 1px solid rgba(98, 215, 155, .15); border-radius: 7px; background: rgba(98, 215, 155, .035); }
 .catalyst-security svg { flex: 0 0 auto; }
 .catalyst-security div { display: flex; flex-direction: column; gap: 3px; }
@@ -1025,6 +1046,10 @@ html[data-theme="light"] .platform-entry-details > div { border-color: #e0e5e7; 
 html[data-theme="light"] .platform-entry-details strong { color: #4d5a64; }
 html[data-theme="light"] .platform-entry-hint { color: #74808a; }
 html[data-theme="light"] .platform-entry-hint strong { color: #805c2d; }
+html[data-theme="light"] .catalyst-binding-card select,
+html[data-theme="light"] .bound-catalyst-summary { color: #45525c; border-color: #d3dade; background: #f6f8f8; }
+html[data-theme="light"] .bound-catalyst-summary strong { color: #4d5a64; }
+html[data-theme="light"] .catalyst-binding-empty { border-color: #ccd5da; }
 html[data-theme="light"] .run-board-heading input { color: #1f2b34; }
 html[data-theme="light"] .board-summary span,
 html[data-theme="light"] .run-board-toolbar,

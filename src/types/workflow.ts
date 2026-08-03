@@ -53,6 +53,9 @@ export interface WorkflowNodeData extends Record<string, unknown> {
     effort?: ReasoningEffort
     tools?: RelayTool[]
   }
+  catalyst?: {
+    definitionId?: string
+  }
   subworkflow?: {
     workflowId: string
     execution: 'inline' | 'isolated'

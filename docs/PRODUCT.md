@@ -86,6 +86,8 @@ Catalysts describe authenticated ways to create runs: signed webhooks, connector
 
 A user primes a workflow by placing one platform-managed Catalyst node at the beginning of its graph and connecting it to the first executable step. It looks and connects like a component in the composer, but has no AI prompt, model, tools, Markdown source, or execution step. That changes the workflow entry mode from manual to catalyst; it does not run anything. Workflows without that node continue to start from the task/objective form.
 
+Configuration is intentionally non-technical: users choose services, events, schedules, timezones, request types, and access scopes from guided controls. Back in the composer, the Catalyst node selects from definitions created for that workflow and exposes a direct enabled/paused switch.
+
 ### 4. Library
 
 Searchable components and blueprints from the repository, workspace, or an optional registry. Users can compare versions, inspect tests, and see where a component is used.

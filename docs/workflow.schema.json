@@ -84,6 +84,13 @@
                 },
                 "additionalProperties": false
               },
+              "catalyst": {
+                "type": "object",
+                "properties": {
+                  "definitionId": { "type": "string", "minLength": 1 }
+                },
+                "additionalProperties": false
+              },
               "subworkflow": {
                 "type": "object",
                 "required": ["workflowId", "execution", "context", "onFailure"],

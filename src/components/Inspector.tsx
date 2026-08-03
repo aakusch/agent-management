@@ -15,14 +15,20 @@ import {
   Zap,
 } from 'lucide-react'
 import type { ProjectContext, ReasoningEffort, RelayTool, WorkflowNode } from '../types/workflow'
+import type { CatalystDefinition } from '../types/catalog'
+import { describeCatalyst } from '../lib/catalysts'
 
 interface InspectorProps {
   node: WorkflowNode | null
   project: ProjectContext
   sourceInstruction: string
+  catalysts: CatalystDefinition[]
+  workflowId: string
   onClose: () => void
   onUpdateNode: (id: string, patch: Partial<WorkflowNode['data']>) => void
   onOpenProjectConfig: () => void
+  onOpenCatalysts: () => void
+  onToggleCatalyst: (id: string) => void
 }
 
 const effortOptions: { id: ReasoningEffort; label: string; detail: string }[] = [
@@ -40,7 +46,7 @@ const toolOptions: { id: RelayTool; label: string }[] = [
   { id: 'web', label: 'Web' },
 ]
 
-export function Inspector({ node, project, sourceInstruction, onClose, onUpdateNode, onOpenProjectConfig }: InspectorProps) {
+export function Inspector({ node, project, sourceInstruction, catalysts, workflowId, onClose, onUpdateNode, onOpenProjectConfig, onOpenCatalysts, onToggleCatalyst }: InspectorProps) {
   const [tab, setTab] = useState<'setup' | 'prompt' | 'source'>('setup')
   if (!node) return null
 
@@ -75,6 +81,8 @@ export function Inspector({ node, project, sourceInstruction, onClose, onUpdateN
   }
 
   if (isCatalyst) {
+    const availableCatalysts = catalysts.filter((catalyst) => catalyst.workflowId === workflowId)
+    const selectedCatalyst = availableCatalysts.find((catalyst) => catalyst.id === node.data.catalyst?.definitionId) ?? availableCatalysts[0]
     return <aside className="inspector-panel component-inspector platform-entry-inspector">
       <div className="inspector-heading component-inspector-heading">
         <div className="inspector-component-title">
@@ -92,6 +100,14 @@ export function Inspector({ node, project, sourceInstruction, onClose, onUpdateN
         <section className="catalyst-entry-note">
           <Zap size={16} />
           <div><strong>Operated by the Relay platform</strong><p>The receiver authenticates and validates an external event, then creates a normal run at this point. No model, prompt, tool, or agent executes here.</p></div>
+        </section>
+        <section className="inspector-section-card catalyst-binding-card">
+          <div className="inspector-section-heading"><span><Zap size={14} /></span><div><h3>Connected catalyst</h3><p>Select a platform trigger created for this workflow.</p></div></div>
+          {availableCatalysts.length ? <>
+            <label><span>Catalyst</span><select value={selectedCatalyst?.id ?? ''} onChange={(event) => onUpdateNode(node.id, { catalyst: { definitionId: event.target.value } })}>{availableCatalysts.map((catalyst) => <option key={catalyst.id} value={catalyst.id}>{catalyst.name}</option>)}</select></label>
+            {selectedCatalyst && <div className="bound-catalyst-summary"><span><strong>{selectedCatalyst.kind.replaceAll('-', ' ')}</strong><small>{describeCatalyst(selectedCatalyst)}</small></span><label className="switch-control"><input type="checkbox" checked={selectedCatalyst.status !== 'paused'} onChange={() => onToggleCatalyst(selectedCatalyst.id)} /><i /><span>{selectedCatalyst.status === 'paused' ? 'Paused' : 'Enabled'}</span></label></div>}
+            <button className="secondary-cta catalyst-manage-button" onClick={onOpenCatalysts}>Manage catalysts <ChevronRight size={13} /></button>
+          </> : <div className="catalyst-binding-empty"><p>No Catalyst has been configured for this workflow yet.</p><button className="secondary-cta" onClick={onOpenCatalysts}>Configure catalyst <ChevronRight size={13} /></button></div>}
         </section>
         <section className="inspector-section-card platform-entry-details">
           <div><span>Starts when</span><strong>A configured catalyst is received</strong></div>

@@ -68,6 +68,8 @@ A workflow is catalyst-primed only when its graph starts with one `kind: catalys
 
 The authoring app persists a catalyst's type, selector, target workflow, and required authentication mode. Only catalyst-primed workflows may be selected. A receiver validates the definition in [`catalyst.schema.json`](catalyst.schema.json), resolves secret references outside the file, and emits a normal `run.created` event with catalyst provenance.
 
+The Catalyst settings UI authors selectors from guided fields rather than requiring cron or event syntax: service/event for hooks, connector/event for subscriptions, cadence/time/timezone for schedules, and request type/access scope for secure queries. The canvas node may bind one of the definitions created for its workflow and toggle that definition between enabled and paused.
+
 ### Workflow references
 
 Saved workflows may appear in the component library as `kind: workflow`. A node stores the referenced workflow ID plus execution, context, and failure policies. Compilation recursively resolves these references, validates exposed contracts, and rejects dependency cycles before any agent starts.
