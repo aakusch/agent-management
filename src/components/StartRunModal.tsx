@@ -129,9 +129,9 @@ export function StartRunModal({ workflowName, projectName, onClose, onStart }: S
       <form ref={dialogRef} className="start-run-modal" role="dialog" aria-modal="true" aria-labelledby="start-run-title" aria-describedby="start-run-description" onSubmit={submit} noValidate>
         <header className="modal-heading">
           <div>
-            <span className="eyebrow">Prepare workflow run</span>
+            <span className="eyebrow">Stage workflow</span>
             <h2 id="start-run-title">What should the agents accomplish?</h2>
-            <p id="start-run-description"><strong>{workflowName}</strong> will be prepared for {projectName}.</p>
+            <p id="start-run-description"><strong>{workflowName}</strong> will be staged for {projectName}.</p>
           </div>
           <button type="button" className="icon-button" onClick={onClose} aria-label="Close prepare run dialog"><X size={17} /></button>
         </header>
@@ -185,7 +185,7 @@ export function StartRunModal({ workflowName, projectName, onClose, onStart }: S
         <footer className="modal-footer">
           <div><span className={`autonomy-indicator ${autonomy}`}><i /> {autonomyOptions.find((option) => option.id === autonomy)?.name}</span><small>{execution === 'dry-run' ? 'Preview only · CLI connection required' : 'Execute · CLI connection required'}</small></div>
           <button type="button" className="secondary-cta" onClick={onClose}>Cancel</button>
-          <button type="submit" className="primary-cta start-run-button" disabled={!task.trim()}><Play size={14} fill="currentColor" /> Prepare run</button>
+          <button type="submit" className="primary-cta start-run-button" disabled={!task.trim()}><Play size={14} fill="currentColor" /> Stage workflow</button>
         </footer>
       </form>
     </div>

@@ -24,6 +24,7 @@ import {
   Layers3,
   KeyRound,
   Moon,
+  Play,
   Plus,
   Search,
   ScanSearch,
@@ -43,6 +44,7 @@ import {
 import type { ComponentKind, ComponentTemplate, ProjectContext, ReasoningEffort, RelayTool } from '../types/workflow'
 import type { CatalystDefinition, CatalystKind, PendingRun, RunMonitorBoard, WorkflowRecord, WorkflowTemplate } from '../types/catalog'
 import { RunBoard } from './RunBoard'
+import { StartRunModal, type RunConfiguration } from './StartRunModal'
 import { describeCatalyst } from '../lib/catalysts'
 
 export type AppPage = 'dashboard' | 'builder' | 'workflows' | 'components' | 'projects' | 'templates' | 'catalysts' | 'runs'
@@ -61,6 +63,7 @@ interface ManagementProps {
   onCreateTemplate: (template: WorkflowTemplate) => void
   onToggleTemplatePublished: (id: string) => void
   onUseTemplate: (template: WorkflowTemplate) => void
+  onStageWorkflow: (workflow: WorkflowRecord, configuration: RunConfiguration) => void
   stagedRuns: PendingRun[]
   onUpdateStagedRuns: (runs: PendingRun[]) => void
   monitorBoard: RunMonitorBoard
@@ -138,6 +141,7 @@ export function Management({
   onCreateTemplate,
   onToggleTemplatePublished,
   onUseTemplate,
+  onStageWorkflow,
   stagedRuns,
   onUpdateStagedRuns,
   monitorBoard,
@@ -183,7 +187,7 @@ export function Management({
         </aside>
         <section className="management-content">
           {page === 'dashboard' && <Dashboard onNavigate={onNavigate} project={project} components={components} workflows={workflows} />}
-          {page === 'workflows' && <WorkflowsPage onNavigate={onNavigate} workflows={workflows} />}
+          {page === 'workflows' && <WorkflowsPage onNavigate={onNavigate} workflows={workflows} projectName={project.name} onStageWorkflow={onStageWorkflow} />}
           {page === 'components' && <ComponentsPage components={components} onCreate={onCreateComponent} />}
           {page === 'projects' && <ProjectsPage project={project} onUpdate={onUpdateProject} />}
           {page === 'templates' && <TemplatesPage templates={templates} onCreate={onCreateTemplate} onTogglePublished={onToggleTemplatePublished} onUseTemplate={onUseTemplate} />}
@@ -250,22 +254,29 @@ function SetupStep({ done, number, title, detail, onClick }: { done?: boolean; n
   return <button className="setup-step" onClick={onClick}><span className={done ? 'done' : ''}>{done ? <CheckCircle2 size={16} /> : number}</span><div><strong>{title}</strong><small>{detail}</small></div><ChevronRight size={16} /></button>
 }
 
-function WorkflowRows({ workflows, onOpen }: { workflows: WorkflowRecord[]; onOpen: (workflow: WorkflowRecord) => void }) {
+function WorkflowRows({ workflows, onOpen, onStage }: { workflows: WorkflowRecord[]; onOpen: (workflow: WorkflowRecord) => void; onStage?: (workflow: WorkflowRecord) => void }) {
   if (workflows.length === 0) return <div className="table-empty"><Workflow size={20} /><strong>No workflows yet</strong><span>Create one in the builder or start from a template.</span></div>
-  return <div className="workflow-rows">{workflows.map((workflow) => <button className="workflow-row" key={workflow.id} onClick={() => onOpen(workflow)}>
-    <span className="row-icon"><Workflow size={17} /></span><div className="row-main"><strong>{workflow.name}</strong><small>{workflow.description}</small></div><span>{workflow.nodeCount} steps</span><span>{workflow.projectName ?? 'Any project'}</span><span className={`status-chip ${workflow.status}`}>{workflow.status}</span><ChevronRight size={15} />
-  </button>)}</div>
+  return <div className="workflow-rows">{workflows.map((workflow) => <div className={`workflow-row-shell ${onStage ? 'has-stage-action' : ''}`} key={workflow.id}>
+    <button className="workflow-row" onClick={() => onOpen(workflow)}>
+      <span className="row-icon"><Workflow size={17} /></span><div className="row-main"><strong>{workflow.name}</strong><small>{workflow.description}</small></div><span>{workflow.nodeCount} steps</span><span>{workflow.projectName ?? 'Any project'}</span><span className={`status-chip ${workflow.status}`}>{workflow.status}</span><ChevronRight size={15} />
+    </button>
+    {onStage && <button className="workflow-stage-action" onClick={() => onStage(workflow)} disabled={workflow.entryMode === 'catalyst'} title={workflow.entryMode === 'catalyst' ? 'Catalyst workflows are primed from the builder.' : `Stage ${workflow.name}`}><Play size={13} /> {workflow.entryMode === 'catalyst' ? 'Catalyst' : 'Stage'}</button>}
+  </div>)}</div>
 }
 
-function WorkflowsPage({ onNavigate, workflows }: { onNavigate: (page: AppPage) => void; workflows: WorkflowRecord[] }) {
+function WorkflowsPage({ onNavigate, workflows, projectName, onStageWorkflow }: { onNavigate: (page: AppPage) => void; workflows: WorkflowRecord[]; projectName: string; onStageWorkflow: (workflow: WorkflowRecord, configuration: RunConfiguration) => void }) {
   const [query, setQuery] = useState('')
+  const [stagingWorkflow, setStagingWorkflow] = useState<WorkflowRecord | null>(null)
   const visibleWorkflows = workflows.filter((workflow) => `${workflow.name} ${workflow.description} ${workflow.projectName ?? ''}`.toLowerCase().includes(query.toLowerCase()))
-  return <div className="page-wrap"><PageHeading eyebrow="Library" title="Workflows" description="Saved ways of working. Reuse one as-is or customize a copy for a project." action={<button className="primary-cta" onClick={() => onNavigate('builder')}><Plus size={16} /> New workflow</button>} />
-    <div className="filter-row"><label className="wide-search"><Search size={15} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search workflows" /></label><button className="filter-button" onClick={() => setQuery('')}>All projects <ChevronRight size={13} /></button></div>
-    <div className="workflow-table surface">
-      <WorkflowRows workflows={visibleWorkflows} onOpen={() => onNavigate('builder')} />
+  return <>
+    <div className="page-wrap"><PageHeading eyebrow="Library" title="Workflows" description="Saved ways of working. Stage one with an objective, or open it to customize the graph." action={<button className="primary-cta" onClick={() => onNavigate('builder')}><Plus size={16} /> New workflow</button>} />
+      <div className="filter-row"><label className="wide-search"><Search size={15} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search workflows" /></label><button className="filter-button" onClick={() => setQuery('')}>All projects <ChevronRight size={13} /></button></div>
+      <div className="workflow-table surface">
+        <WorkflowRows workflows={visibleWorkflows} onOpen={() => onNavigate('builder')} onStage={setStagingWorkflow} />
+      </div>
     </div>
-  </div>
+    {stagingWorkflow && <StartRunModal workflowName={stagingWorkflow.name} projectName={stagingWorkflow.projectName ?? projectName} onClose={() => setStagingWorkflow(null)} onStart={(configuration) => { onStageWorkflow(stagingWorkflow, configuration); setStagingWorkflow(null) }} />}
+  </>
 }
 
 function ComponentsPage({ components, onCreate }: { components: ComponentTemplate[]; onCreate: (component: ComponentTemplate) => void }) {

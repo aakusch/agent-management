@@ -674,7 +674,7 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
           <button className="subtle-button header-action" onClick={() => void openProjectConfig()}><Settings2 size={15} /> Configure</button>
           {hasCatalyst
             ? <button className="run-button catalyst-prime-button" onClick={() => void primeCatalyst()}><Zap size={14} fill="currentColor" /> Prime catalyst</button>
-            : <button className="run-button" onClick={() => setStartRunOpen(true)}><Play size={14} fill="currentColor" /> Run workflow</button>}
+            : <button className="run-button" onClick={() => setStartRunOpen(true)}><Play size={14} fill="currentColor" /> Stage workflow</button>}
           <input
             ref={importInput}
             type="file"
@@ -815,7 +815,8 @@ export default function App() {
       groups: [{ id: 'workspace', name: 'Workspace', projectName: project.root ? project.name : undefined }],
       tiles: [],
     }
-    return readStored('relay.monitorBoard', fallback, isMonitorBoard)
+    const saved = readStored('relay.monitorBoard', fallback, isMonitorBoard)
+    return { ...saved, tiles: saved.tiles.filter((tile) => tile.status !== 'not-started') }
   })
   const components = useMemo(() => {
     const customIds = new Set(customComponents.map((item) => item.id))
@@ -851,6 +852,29 @@ export default function App() {
       incoming.filter((item) => !builtInIds.has(item.id)).forEach((item) => merged.set(item.id, item))
       return [...merged.values()]
     })
+  }
+
+  const stageSavedWorkflow = (workflow: WorkflowRecord, configuration: RunConfiguration) => {
+    const savedDocument = readStored<WorkflowDocument | null>(
+      'relay.workflow', null, (value): value is WorkflowDocument | null => value === null || isWorkflowDocument(value),
+    )
+    const graph = savedDocument?.id === workflow.id ? {
+      nodes: savedDocument.nodes.map((node) => ({ id: node.id, label: node.data.label, kind: node.data.kind, x: node.position.x, y: node.position.y })),
+      edges: savedDocument.edges.map((item) => ({ id: item.id, source: item.source, target: item.target, label: item.data?.label, tone: item.data?.tone })),
+    } : undefined
+    const run: PendingRun = {
+      id: `run-${Date.now()}`,
+      workflowId: workflow.id,
+      workflowName: workflow.name,
+      projectName: workflow.projectName ?? (project.root ? project.name : undefined),
+      configuration,
+      createdAt: new Date().toISOString(),
+      state: 'staged',
+      preparedBy: 'user',
+      graph,
+    }
+    setStagedRuns((current) => [run, ...current.filter((item) => item.id !== run.id)])
+    navigate('runs')
   }
 
   if (page === 'builder') {
@@ -891,6 +915,7 @@ export default function App() {
       onCreateTemplate={(template) => setUserTemplates((current) => [template, ...current.filter((item) => item.id !== template.id)])}
       onToggleTemplatePublished={(id) => setUserTemplates((current) => current.map((template) => template.id === id ? { ...template, published: !template.published } : template))}
       onUseTemplate={(template) => { removeStored('relay.workflow'); setBuilderTemplate(template); navigate('builder') }}
+      onStageWorkflow={stageSavedWorkflow}
       stagedRuns={stagedRuns}
       onUpdateStagedRuns={setStagedRuns}
       monitorBoard={monitorBoard}

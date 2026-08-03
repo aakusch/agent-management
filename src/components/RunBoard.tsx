@@ -349,7 +349,8 @@ export function RunBoard({ board, workflows, stagedRuns, onUpdateStagedRuns, onC
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'attention' | 'completed'>('all')
   const [authoringOpen, setAuthoringOpen] = useState(false)
-  const selectedTile = board.tiles.find((tile) => tile.id === selectedRunId)
+  const runningTiles = board.tiles.filter((tile) => tile.status !== 'not-started')
+  const selectedTile = runningTiles.find((tile) => tile.id === selectedRunId)
 
   const patchTile = useCallback((id: string, patch: Partial<RunMonitorTile>) => {
     onChange({ ...board, tiles: board.tiles.map((tile) => tile.id === id ? { ...tile, ...patch } : tile) })
@@ -372,13 +373,13 @@ export function RunBoard({ board, workflows, stagedRuns, onUpdateStagedRuns, onC
       updatedAt: new Date().toISOString(),
       graph: run.graph,
     }
-    onChange({ ...board, tiles: [tile, ...board.tiles.filter((item) => item.id !== run.id)] })
+    onChange({ ...board, tiles: [tile, ...board.tiles.filter((item) => item.id !== run.id && item.status !== 'not-started')] })
     onUpdateStagedRuns(stagedRuns.filter((item) => item.id !== run.id))
     setSection('running')
     setSelectedRunId(run.id)
   }
 
-  const filteredTiles = board.tiles.filter((tile) => {
+  const filteredTiles = runningTiles.filter((tile) => {
     const query = search.trim().toLowerCase()
     const matchesSearch = !query || `${tile.workflowName} ${tile.objective ?? ''} ${tile.projectName ?? ''}`.toLowerCase().includes(query)
     const matchesStatus = statusFilter === 'all'
@@ -401,11 +402,11 @@ export function RunBoard({ board, workflows, stagedRuns, onUpdateStagedRuns, onC
 
       <div className="run-section-tabs" role="tablist" aria-label="Run state">
         <button role="tab" aria-selected={section === 'staged'} className={section === 'staged' ? 'active' : ''} onClick={() => setSection('staged')}><span><FileJson2 size={15} /> Staged</span><em>{stagedRuns.length}</em><small>Prepared and editable</small></button>
-        <button role="tab" aria-selected={section === 'running'} className={section === 'running' ? 'active' : ''} onClick={() => setSection('running')}><span><Activity size={15} /> Running</span><em>{board.tiles.length}</em><small>Live, blocked, and complete</small></button>
+        <button role="tab" aria-selected={section === 'running'} className={section === 'running' ? 'active' : ''} onClick={() => setSection('running')}><span><Activity size={15} /> Running</span><em>{runningTiles.length}</em><small>Live, blocked, and complete</small></button>
       </div>
 
       {section === 'staged' ? <section className="runs-section">
-        <div className="runs-section-heading"><div><h2>Staged workflows</h2><p>These assignments can still be edited. Starting one moves it into Running and waits for its local driver.</p></div><button className="primary-cta small" onClick={onOpenBuilder}>Stage a workflow <ArrowRight size={13} /></button></div>
+        <div className="runs-section-heading"><div><h2>Staged workflows</h2><p>These assignments can still be edited. Run one when you are ready to attach its local driver.</p></div><button className="primary-cta small" onClick={onOpenBuilder}>Stage another workflow <ArrowRight size={13} /></button></div>
         {stagedRuns.length ? <div className="staged-run-list">
           <div className="staged-list-header"><span>Workflow and objective</span><span>Project</span><span>Run policy</span><span>Prepared</span><span /></div>
           {stagedRuns.map((run) => <article className="staged-run-row" key={run.id}>
@@ -413,7 +414,7 @@ export function RunBoard({ board, workflows, stagedRuns, onUpdateStagedRuns, onC
             <span>{run.projectName || 'No project'}</span>
             <div className="run-policy"><span>{run.configuration.autonomy}</span><span>{run.configuration.execution === 'dry-run' ? 'dry run' : 'execute'}</span></div>
             <time>{new Date(run.createdAt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</time>
-            <div className="staged-actions"><button onClick={onOpenBuilder}>Edit</button><button className="start-staged" onClick={() => startStaged(run)}><Play size={12} /> Start</button><button className="remove-staged" onClick={() => onUpdateStagedRuns(stagedRuns.filter((item) => item.id !== run.id))} aria-label={`Delete ${run.workflowName} staged run`}><Trash2 size={13} /></button></div>
+            <div className="staged-actions"><button onClick={onOpenBuilder}>Edit</button><button className="start-staged" onClick={() => startStaged(run)}><Play size={12} /> Run workflow</button><button className="remove-staged" onClick={() => onUpdateStagedRuns(stagedRuns.filter((item) => item.id !== run.id))} aria-label={`Delete ${run.workflowName} staged run`}><Trash2 size={13} /></button></div>
           </article>)}
         </div> : <div className="runs-empty"><FileJson2 size={24} /><h2>No staged workflows</h2><p>Use the builder to define an objective and run policy. Relay will hold the assignment here until you start it.</p><button className="primary-cta small" onClick={onOpenBuilder}>Open builder</button></div>}
       </section> : <section className="runs-section">
@@ -432,7 +433,7 @@ export function RunBoard({ board, workflows, stagedRuns, onUpdateStagedRuns, onC
               </button>
             </article>
           })}
-        </div> : <div className="runs-empty"><Activity size={24} /><h2>{board.tiles.length ? 'No runs match this view' : 'No running workflows'}</h2><p>{board.tiles.length ? 'Change the status filter or search query.' : 'Start a staged workflow first. It will appear here while waiting for the runner.'}</p>{!board.tiles.length && <button className="primary-cta small" onClick={() => setSection('staged')}>View staged workflows</button>}</div>}
+        </div> : <div className="runs-empty"><Activity size={24} /><h2>{runningTiles.length ? 'No runs match this view' : 'No running workflows'}</h2><p>{runningTiles.length ? 'Change the status filter or search query.' : 'Run a staged workflow first. It will appear here while waiting for the runner.'}</p>{!runningTiles.length && <button className="primary-cta small" onClick={() => setSection('staged')}>View staged workflows</button>}</div>}
       </section>}
     </div>
   )
