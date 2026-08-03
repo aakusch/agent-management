@@ -64,9 +64,9 @@ The handoff artifact is a self-contained `*.relay.json` file with kind `relay.as
 
 Catalysts are separately versioned platform entrypoint definitions, not Markdown instructions or embedded secrets. The composer renders a Catalyst as a component-shaped node because it participates in graph topology, but it has no prompt, model, effort, tools, Contract tab, or Source tab and is not included in the assignment's `components` bundle.
 
-A workflow is catalyst-primed only when its graph starts with one `kind: catalyst` node. That node has no incoming transition and passes the receiver's validated payload and sanitized provenance to the first executable component. Without a Catalyst node, `entry.mode` is `manual` and the driver starts from the graph's ordinary root components.
+A workflow uses catalyst entry only when its graph starts with one `kind: catalyst` node. That node has no incoming transition and passes the receiver's validated payload and sanitized provenance to the first executable component. Without a Catalyst node, `entry.mode` is `manual` and the driver starts from the graph's ordinary root components.
 
-The authoring app persists a catalyst's type, selector, target workflow, and required authentication mode. Only catalyst-primed workflows may be selected. A receiver validates the definition in [`catalyst.schema.json`](catalyst.schema.json), resolves secret references outside the file, and emits a normal `run.created` event with catalyst provenance.
+The authoring app persists a catalyst's type, selector, target workflow, and required authentication mode. Only workflows staged with catalyst entry may be selected. A receiver validates the definition in [`catalyst.schema.json`](catalyst.schema.json), resolves secret references outside the file, and emits a normal `run.created` event with catalyst provenance.
 
 The Catalyst settings UI authors selectors from guided fields rather than requiring cron or event syntax: service/event for hooks, connector/event for subscriptions, cadence/time/timezone for schedules, and request type/access scope for secure queries. The canvas node may bind one of the definitions created for its workflow and toggle that definition between enabled and paused.
 

@@ -22,12 +22,10 @@ import {
   Download,
   FolderGit2,
   Import,
-  LayoutTemplate,
   Menu,
   Moon,
   MoreHorizontal,
   Play,
-  Settings2,
   Sparkles,
   Sun,
   Zap,
@@ -372,7 +370,7 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
   const componentLookup = useMemo(() => Object.fromEntries(authoringComponents.map((item) => [item.id, item])), [authoringComponents])
   const catalystNodes = useMemo(() => nodes.filter((node) => node.data.kind === 'catalyst'), [nodes])
   const hasCatalyst = catalystNodes.length > 0
-  const isCatalystPrimed = catalystNodes.length === 1
+  const isCatalystEntrypointValid = catalystNodes.length === 1
     && edges.some((edge) => edge.source === catalystNodes[0].id)
     && !edges.some((edge) => edge.target === catalystNodes[0].id)
     && nodes.every((node) => node.id === catalystNodes[0].id || edges.some((edge) => edge.target === node.id))
@@ -540,14 +538,14 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
       updatedAt: new Date().toISOString(),
       status: 'ready',
       source: 'local',
-      entryMode: isCatalystPrimed ? 'catalyst' : 'manual',
+      entryMode: isCatalystEntrypointValid ? 'catalyst' : 'manual',
       steps: nodes.map((node) => node.data.label),
     })
     await sleep(350)
     setSaveState('saved')
     showToast('Workflow saved locally')
     return true
-  }, [documentForExport, isCatalystPrimed, nodes, onWorkflowSaved, project.name, project.root, showToast, workflowId, workflowName])
+  }, [documentForExport, isCatalystEntrypointValid, nodes, onWorkflowSaved, project.name, project.root, showToast, workflowId, workflowName])
 
   const exportWorkflow = useCallback(() => {
     const blob = new Blob([JSON.stringify(assignmentForExport(), null, 2)], { type: 'application/json' })
@@ -602,7 +600,7 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
     return true
   }, [catalystNodes, edges, hasCatalyst, nodes, showToast])
 
-  const primeCatalyst = useCallback(async () => {
+  const stageCatalystWorkflow = useCallback(async () => {
     if (!validateWorkflow()) return
     const saved = await saveWorkflow()
     if (saved) onNavigate('catalysts')
@@ -670,10 +668,8 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
           </div>
         </div>
         <div className="topbar-actions">
-          <button className="subtle-button header-action" onClick={() => onNavigate('templates')}><LayoutTemplate size={15} /> Templates</button>
-          <button className="subtle-button header-action" onClick={() => void openProjectConfig()}><Settings2 size={15} /> Configure</button>
           {hasCatalyst
-            ? <button className="run-button catalyst-prime-button" onClick={() => void primeCatalyst()}><Zap size={14} fill="currentColor" /> Prime catalyst</button>
+            ? <button className="run-button" onClick={() => void stageCatalystWorkflow()}><Zap size={14} fill="currentColor" /> Stage</button>
             : <button className="run-button" onClick={() => setStartRunOpen(true)}><Play size={14} fill="currentColor" /> Stage workflow</button>}
           <input
             ref={importInput}
@@ -690,15 +686,13 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
             {saveState === 'saved' ? <Check size={15} /> : <Cloud className="pulse" size={15} />}
             {saveState === 'saved' ? 'Saved' : 'Save'}
           </button>
-          <button className="icon-button theme-toggle" onClick={onToggleTheme} aria-label={`Use ${theme === 'dark' ? 'light' : 'dark'} theme`}>
-            {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
-          </button>
           <div className="overflow-wrap" ref={overflowRef}>
             <button className="icon-button" onClick={() => setOverflowOpen((open) => !open)} aria-label="More workflow actions" aria-expanded={overflowOpen}><MoreHorizontal size={18} /></button>
             {overflowOpen && <div className="overflow-menu" role="menu">
               <button role="menuitem" onClick={() => { importInput.current?.click(); setOverflowOpen(false) }}><Import size={15} /><span><strong>Import workflow</strong><small>Open a JSON or Relay assignment</small></span></button>
               <button role="menuitem" onClick={() => { exportWorkflow(); setOverflowOpen(false) }}><Download size={15} /><span><strong>Export assignment</strong><small>Download the driver-ready bundle</small></span></button>
               <button role="menuitem" onClick={() => { onNavigate('runs'); setOverflowOpen(false) }}><Cloud size={15} /><span><strong>View runs</strong><small>Open live and prepared runs</small></span></button>
+              <button role="menuitem" onClick={() => { onToggleTheme(); setOverflowOpen(false) }}>{theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}<span><strong>{theme === 'dark' ? 'Light mode' : 'Dark mode'}</strong><small>Change the interface appearance</small></span></button>
             </div>}
           </div>
         </div>
@@ -764,7 +758,7 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
           onClose={() => setSelectedNodeId(null)}
           onUpdateNode={updateNode}
           onOpenProjectConfig={() => void openProjectConfig()}
-          onOpenCatalysts={() => void primeCatalyst()}
+          onOpenCatalysts={() => void stageCatalystWorkflow()}
           onToggleCatalyst={onToggleCatalyst}
         />
         <TransitionInspector

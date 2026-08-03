@@ -104,7 +104,7 @@ export function Inspector({ node, project, sourceInstruction, catalysts, workflo
             <button className="secondary-cta catalyst-manage-button" onClick={onOpenCatalysts}>Manage catalysts <ChevronRight size={13} /></button>
           </> : <div className="catalyst-binding-empty"><p>No Catalyst has been configured for this workflow yet.</p><button className="secondary-cta" onClick={onOpenCatalysts}>Configure catalyst <ChevronRight size={13} /></button></div>}
         </section>
-        <p className="platform-entry-hint">Connect this node to the first executable component, then use <strong>Prime catalyst</strong> to configure the hook, connector event, schedule, or query.</p>
+        <p className="platform-entry-hint">Connect this node to the first executable component, then use <strong>Stage</strong> to save the workflow and configure its hook, connector event, schedule, or query.</p>
       </div>
     </aside>
   }

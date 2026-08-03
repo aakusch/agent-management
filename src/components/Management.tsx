@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   Accessibility,
   Activity,
@@ -24,6 +24,7 @@ import {
   Layers3,
   KeyRound,
   Moon,
+  MoreHorizontal,
   Play,
   Plus,
   Search,
@@ -150,6 +151,25 @@ export function Management({
   onCreateCatalyst,
   onToggleCatalyst,
 }: ManagementProps) {
+  const [overflowOpen, setOverflowOpen] = useState(false)
+  const overflowRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!overflowOpen) return
+    const close = (event: PointerEvent) => {
+      if (!overflowRef.current?.contains(event.target as Node)) setOverflowOpen(false)
+    }
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOverflowOpen(false)
+    }
+    document.addEventListener('pointerdown', close)
+    document.addEventListener('keydown', closeOnEscape)
+    return () => {
+      document.removeEventListener('pointerdown', close)
+      document.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [overflowOpen])
+
   return (
     <main className="app-shell management-shell">
       <header className="topbar management-topbar">
@@ -161,11 +181,13 @@ export function Management({
         <div className="topbar-divider" />
         <span className="topbar-page">{pageLabels[page]}</span>
         <div className="topbar-actions">
-          <button className="subtle-button" onClick={() => onNavigate('projects')}><Settings2 size={15} /> {project.root ? project.name : 'Configure project'}</button>
-          <button className="icon-button theme-toggle" onClick={onToggleTheme} aria-label={`Use ${theme === 'dark' ? 'light' : 'dark'} theme`}>
-            {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
-          </button>
           <button className="run-button" onClick={() => onNavigate('builder')}><Plus size={14} /> Open builder</button>
+          <div className="overflow-wrap" ref={overflowRef}>
+            <button className="icon-button" onClick={() => setOverflowOpen((open) => !open)} aria-label="More application actions" aria-expanded={overflowOpen}><MoreHorizontal size={18} /></button>
+            {overflowOpen && <div className="overflow-menu" role="menu">
+              <button role="menuitem" onClick={() => { onToggleTheme(); setOverflowOpen(false) }}>{theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}<span><strong>{theme === 'dark' ? 'Light mode' : 'Dark mode'}</strong><small>Change the interface appearance</small></span></button>
+            </div>}
+          </div>
         </div>
       </header>
       <div className="management-body">
@@ -260,7 +282,7 @@ function WorkflowRows({ workflows, onOpen, onStage }: { workflows: WorkflowRecor
     <button className="workflow-row" onClick={() => onOpen(workflow)}>
       <span className="row-icon"><Workflow size={17} /></span><div className="row-main"><strong>{workflow.name}</strong><small>{workflow.description}</small></div><span>{workflow.nodeCount} steps</span><span>{workflow.projectName ?? 'Any project'}</span><span className={`status-chip ${workflow.status}`}>{workflow.status}</span><ChevronRight size={15} />
     </button>
-    {onStage && <button className="workflow-stage-action" onClick={() => onStage(workflow)} disabled={workflow.entryMode === 'catalyst'} title={workflow.entryMode === 'catalyst' ? 'Catalyst workflows are primed from the builder.' : `Stage ${workflow.name}`}><Play size={13} /> {workflow.entryMode === 'catalyst' ? 'Catalyst' : 'Stage'}</button>}
+    {onStage && <button className="workflow-stage-action" onClick={() => onStage(workflow)} disabled={workflow.entryMode === 'catalyst'} title={workflow.entryMode === 'catalyst' ? 'Catalyst workflows are staged from the builder.' : `Stage ${workflow.name}`}><Play size={13} /> {workflow.entryMode === 'catalyst' ? 'Catalyst' : 'Stage'}</button>}
   </div>)}</div>
 }
 
@@ -492,17 +514,17 @@ const catalystSelector = (kind: CatalystKind, settings: typeof defaultCatalystSe
 }
 
 function CatalystsPage({ catalysts, workflows, onCreate, onToggle }: { catalysts: CatalystDefinition[]; workflows: WorkflowRecord[]; onCreate: (catalyst: CatalystDefinition) => void; onToggle: (id: string) => void }) {
-  const primedWorkflows = workflows.filter((workflow) => workflow.entryMode === 'catalyst')
+  const catalystWorkflows = workflows.filter((workflow) => workflow.entryMode === 'catalyst')
   const [creating, setCreating] = useState(false)
   const [draft, setDraft] = useState({ name: '', kind: 'connector-event' as CatalystKind, workflowId: '', settings: { ...defaultCatalystSettings } })
   const kind = catalystKinds[draft.kind]
   const openCreator = () => {
-    if (!primedWorkflows.length) return
-    setDraft((current) => ({ ...current, workflowId: primedWorkflows.some((workflow) => workflow.id === current.workflowId) ? current.workflowId : primedWorkflows[0].id }))
+    if (!catalystWorkflows.length) return
+    setDraft((current) => ({ ...current, workflowId: catalystWorkflows.some((workflow) => workflow.id === current.workflowId) ? current.workflowId : catalystWorkflows[0].id }))
     setCreating(true)
   }
   const create = () => {
-    const workflow = primedWorkflows.find((item) => item.id === draft.workflowId)
+    const workflow = catalystWorkflows.find((item) => item.id === draft.workflowId)
     if (!workflow || !draft.name.trim()) return
     const id = draft.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
     onCreate({ id, name: draft.name.trim(), kind: draft.kind, workflowId: workflow.id, workflowName: workflow.name, selector: catalystSelector(draft.kind, draft.settings), settings: draft.settings, security: kind.security, status: 'awaiting-runner', createdAt: new Date().toISOString() })
@@ -526,10 +548,10 @@ function CatalystsPage({ catalysts, workflows, onCreate, onToggle }: { catalysts
     <label><span>Who may request it</span><select value={draft.settings.scope} onChange={(event) => updateSetting('scope', event.target.value)}><option value="workspace">Workspace members</option><option value="service-account">Approved service account</option><option value="runner-token">Runner token holders</option></select></label>
   </div>
 
-  return <div className="page-wrap"><PageHeading eyebrow="Workflow entrypoints" title="Catalysts" description="Define what may start a workflow. Relay verifies the event at the receiver, records its provenance, then creates a normal auditable run." action={<button className="primary-cta" disabled={!primedWorkflows.length} title={!primedWorkflows.length ? 'Add and connect a Catalyst component in a workflow first' : undefined} onClick={openCreator}><Plus size={15} /> New catalyst</button>} />
-    {!primedWorkflows.length && <section className="catalyst-prerequisite"><Zap size={17} /><div><strong>Prime a workflow first</strong><span>Add the Catalyst component as the first node, connect it to the first executable step, then save the workflow. Workflows without it remain manual.</span></div></section>}
-    {creating && <section className="surface catalyst-create"><div className="editor-title"><div><span className="eyebrow">Secure entrypoint</span><h2>Configure a catalyst</h2></div><button className="icon-button" onClick={() => setCreating(false)}><X size={16} /></button></div><div className="catalyst-create-grid"><div className="catalyst-kind-grid">{(Object.entries(catalystKinds) as [CatalystKind, typeof kind][]).map(([id, option]) => { const Icon = option.Icon; return <button className={draft.kind === id ? 'selected' : ''} key={id} onClick={() => setDraft({ ...draft, kind: id })}><Icon size={17} /><strong>{option.label}</strong><small>{option.detail}</small></button> })}</div><div className="editor-form catalyst-fields"><label><span>Name</span><input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="PR quality check" /></label><label><span>Primed workflow</span><select value={draft.workflowId} onChange={(event) => setDraft({ ...draft, workflowId: event.target.value })}>{primedWorkflows.map((workflow) => <option value={workflow.id} key={workflow.id}>{workflow.name}</option>)}</select></label>{guidedFields}<div className="catalyst-security"><ShieldCheck size={16} /><div><strong>{kind.security === 'hmac' ? 'HMAC signature required' : kind.security === 'connector-oauth' ? 'Connector authorization required' : 'Runner token required'}</strong><span>Secrets are referenced by name and resolved by the receiver. They are never stored in workflow JSON.</span></div></div><div className="editor-actions"><button className="secondary-cta" onClick={() => setCreating(false)}>Cancel</button><button className="primary-cta" onClick={create} disabled={!draft.name.trim() || !draft.workflowId}>Save catalyst</button></div></div></div></section>}
-    {catalysts.length ? <div className="catalyst-list">{catalysts.map((catalyst) => { const option = catalystKinds[catalyst.kind]; const Icon = option.Icon; return <article className="surface catalyst-card" key={catalyst.id}><span className="catalyst-card-icon"><Icon size={18} /></span><div className="catalyst-card-main"><div><span className="eyebrow">{option.label}</span><h2>{catalyst.name}</h2></div><p>{describeCatalyst(catalyst)}</p><div className="catalyst-route"><span><Zap size={12} /> {catalyst.workflowName}</span><ArrowRight size={12} /><span><ShieldCheck size={12} /> {catalyst.security}</span></div></div><div className="catalyst-card-state"><span className={`status-chip ${catalyst.status === 'paused' ? 'draft' : 'ready'}`}><i /> {catalyst.status === 'paused' ? 'Paused' : 'Awaiting receiver'}</span><button className="secondary-cta" onClick={() => onToggle(catalyst.id)}>{catalyst.status === 'paused' ? 'Enable' : 'Pause'}</button></div></article> })}</div> : <section className="surface catalyst-empty"><span><Webhook size={22} /></span><h2>No catalysts configured</h2><p>Create a signed hook, connector subscription, schedule, or secure query. Nothing listens publicly until a Relay receiver is connected and authorized.</p><button className="secondary-cta" disabled={!primedWorkflows.length} onClick={openCreator}>Configure first catalyst <ArrowRight size={13} /></button></section>}
+  return <div className="page-wrap"><PageHeading eyebrow="Workflow entrypoints" title="Catalysts" description="Define what may start a workflow. Relay verifies the event at the receiver, records its provenance, then creates a normal auditable run." action={<button className="primary-cta" disabled={!catalystWorkflows.length} title={!catalystWorkflows.length ? 'Add and connect a Catalyst component in a workflow first' : undefined} onClick={openCreator}><Plus size={15} /> New catalyst</button>} />
+    {!catalystWorkflows.length && <section className="catalyst-prerequisite"><Zap size={17} /><div><strong>Stage a catalyst workflow first</strong><span>Add the Catalyst component as the first node, connect it to the first executable step, then choose Stage in the builder. Workflows without it remain manual.</span></div></section>}
+    {creating && <section className="surface catalyst-create"><div className="editor-title"><div><span className="eyebrow">Secure entrypoint</span><h2>Configure a catalyst</h2></div><button className="icon-button" onClick={() => setCreating(false)}><X size={16} /></button></div><div className="catalyst-create-grid"><div className="catalyst-kind-grid">{(Object.entries(catalystKinds) as [CatalystKind, typeof kind][]).map(([id, option]) => { const Icon = option.Icon; return <button className={draft.kind === id ? 'selected' : ''} key={id} onClick={() => setDraft({ ...draft, kind: id })}><Icon size={17} /><strong>{option.label}</strong><small>{option.detail}</small></button> })}</div><div className="editor-form catalyst-fields"><label><span>Name</span><input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="PR quality check" /></label><label><span>Catalyst workflow</span><select value={draft.workflowId} onChange={(event) => setDraft({ ...draft, workflowId: event.target.value })}>{catalystWorkflows.map((workflow) => <option value={workflow.id} key={workflow.id}>{workflow.name}</option>)}</select></label>{guidedFields}<div className="catalyst-security"><ShieldCheck size={16} /><div><strong>{kind.security === 'hmac' ? 'HMAC signature required' : kind.security === 'connector-oauth' ? 'Connector authorization required' : 'Runner token required'}</strong><span>Secrets are referenced by name and resolved by the receiver. They are never stored in workflow JSON.</span></div></div><div className="editor-actions"><button className="secondary-cta" onClick={() => setCreating(false)}>Cancel</button><button className="primary-cta" onClick={create} disabled={!draft.name.trim() || !draft.workflowId}>Save catalyst</button></div></div></div></section>}
+    {catalysts.length ? <div className="catalyst-list">{catalysts.map((catalyst) => { const option = catalystKinds[catalyst.kind]; const Icon = option.Icon; return <article className="surface catalyst-card" key={catalyst.id}><span className="catalyst-card-icon"><Icon size={18} /></span><div className="catalyst-card-main"><div><span className="eyebrow">{option.label}</span><h2>{catalyst.name}</h2></div><p>{describeCatalyst(catalyst)}</p><div className="catalyst-route"><span><Zap size={12} /> {catalyst.workflowName}</span><ArrowRight size={12} /><span><ShieldCheck size={12} /> {catalyst.security}</span></div></div><div className="catalyst-card-state"><span className={`status-chip ${catalyst.status === 'paused' ? 'draft' : 'ready'}`}><i /> {catalyst.status === 'paused' ? 'Paused' : 'Awaiting receiver'}</span><button className="secondary-cta" onClick={() => onToggle(catalyst.id)}>{catalyst.status === 'paused' ? 'Enable' : 'Pause'}</button></div></article> })}</div> : <section className="surface catalyst-empty"><span><Webhook size={22} /></span><h2>No catalysts configured</h2><p>Create a signed hook, connector subscription, schedule, or secure query. Nothing listens publicly until a Relay receiver is connected and authorized.</p><button className="secondary-cta" disabled={!catalystWorkflows.length} onClick={openCreator}>Configure first catalyst <ArrowRight size={13} /></button></section>}
     <section className="catalyst-boundary"><ShieldCheck size={17} /><div><strong>Receiver boundary</strong><span>The website authors catalyst definitions. A local daemon or hosted Relay receiver performs signature checks, connector authentication, replay protection, rate limits, and idempotency before creating a run.</span></div></section>
   </div>
 }
