@@ -52,7 +52,6 @@ export function Inspector({ node, project, sourceInstruction, catalysts, workflo
 
   const sourcePath = node.data.subworkflow ? `workflows/${node.data.subworkflow.workflowId}.json` : `components/${node.data.templateId}.md`
   const execution = node.data.execution ?? {}
-  const effectiveModel = execution.model || project.defaults.model
   const effectiveEffort = execution.effort || project.defaults.effort
   const effectiveTools = (execution.tools ?? project.defaults.tools).filter((tool) => project.defaults.tools.includes(tool))
   const instructionChanged = node.data.instruction !== sourceInstruction
@@ -97,10 +96,6 @@ export function Inspector({ node, project, sourceInstruction, catalysts, workflo
           <label><span>Name</span><input value={node.data.label} onChange={(event) => onUpdateNode(node.id, { label: event.target.value })} /></label>
           <label><span>Purpose in this workflow</span><textarea rows={3} value={node.data.description} onChange={(event) => onUpdateNode(node.id, { description: event.target.value })} /></label>
         </section>
-        <section className="catalyst-entry-note">
-          <Zap size={16} />
-          <div><strong>Operated by the Relay platform</strong><p>The receiver authenticates and validates an external event, then creates a normal run at this point. No model, prompt, tool, or agent executes here.</p></div>
-        </section>
         <section className="inspector-section-card catalyst-binding-card">
           <div className="inspector-section-heading"><span><Zap size={14} /></span><div><h3>Connected catalyst</h3><p>Select a platform trigger created for this workflow.</p></div></div>
           {availableCatalysts.length ? <>
@@ -108,11 +103,6 @@ export function Inspector({ node, project, sourceInstruction, catalysts, workflo
             {selectedCatalyst && <div className="bound-catalyst-summary"><span><strong>{selectedCatalyst.kind.replaceAll('-', ' ')}</strong><small>{describeCatalyst(selectedCatalyst)}</small></span><label className="switch-control"><input type="checkbox" checked={selectedCatalyst.status !== 'paused'} onChange={() => onToggleCatalyst(selectedCatalyst.id)} /><i /><span>{selectedCatalyst.status === 'paused' ? 'Paused' : 'Enabled'}</span></label></div>}
             <button className="secondary-cta catalyst-manage-button" onClick={onOpenCatalysts}>Manage catalysts <ChevronRight size={13} /></button>
           </> : <div className="catalyst-binding-empty"><p>No Catalyst has been configured for this workflow yet.</p><button className="secondary-cta" onClick={onOpenCatalysts}>Configure catalyst <ChevronRight size={13} /></button></div>}
-        </section>
-        <section className="inspector-section-card platform-entry-details">
-          <div><span>Starts when</span><strong>A configured catalyst is received</strong></div>
-          <div><span>Passes forward</span><strong>Validated payload and provenance</strong></div>
-          <div><span>Graph rule</span><strong>One Catalyst, no incoming transition</strong></div>
         </section>
         <p className="platform-entry-hint">Connect this node to the first executable component, then use <strong>Prime catalyst</strong> to configure the hook, connector event, schedule, or query.</p>
       </div>
@@ -152,20 +142,18 @@ export function Inspector({ node, project, sourceInstruction, catalysts, workflo
                 <datalist id="relay-model-suggestions"><option value="auto" /><option value="openai/model-id" /><option value="anthropic/model-id" /><option value="google/model-id" /></datalist>
               </label>
               <div className="runtime-field-label"><span>Reasoning effort</span><em>{execution.effort ? 'Override' : `Inherits ${project.defaults.effort}`}</em></div>
-              <div className="effort-picker" role="group" aria-label="Reasoning effort">
-                {effortOptions.map((option) => <button key={option.id} className={effectiveEffort === option.id ? 'selected' : ''} aria-pressed={effectiveEffort === option.id} onClick={() => updateExecution('effort', option.id)}><strong>{option.label}</strong><small>{option.detail}</small></button>)}
+              <div className="effort-picker compact" role="group" aria-label="Reasoning effort">
+                {effortOptions.map((option) => <button key={option.id} title={option.detail} className={effectiveEffort === option.id ? 'selected' : ''} aria-pressed={effectiveEffort === option.id} onClick={() => updateExecution('effort', option.id)}><strong>{option.label}</strong></button>)}
               </div>
               {execution.effort && <button className="inherit-reset" onClick={() => updateExecution('effort', undefined)}><RotateCcw size={12} /> Use project effort</button>}
             </>}
 
             {supportsTools && <>
               <div className="runtime-field-label tool-heading"><span>Tools</span><div className="inherit-choice"><button className={!execution.tools ? 'active' : ''} onClick={() => updateExecution('tools', undefined)}>Inherit</button><button className={execution.tools ? 'active' : ''} onClick={() => updateExecution('tools', execution.tools ?? [...project.defaults.tools])}>Custom</button></div></div>
-              <div className={`tool-picker ${!execution.tools ? 'inherited' : ''}`}>
-                {toolOptions.map((tool) => <button key={tool.id} disabled={!execution.tools || !project.defaults.tools.includes(tool.id)} className={effectiveTools.includes(tool.id) ? 'selected' : ''} aria-pressed={effectiveTools.includes(tool.id)} title={!project.defaults.tools.includes(tool.id) ? 'Enable this tool in project configuration first' : undefined} onClick={() => toggleTool(tool.id)}><Wrench size={12} /> {tool.label}</button>)}
-              </div>
+              {execution.tools && <div className="tool-picker">
+                {toolOptions.filter((tool) => project.defaults.tools.includes(tool.id)).map((tool) => <button key={tool.id} className={effectiveTools.includes(tool.id) ? 'selected' : ''} aria-pressed={effectiveTools.includes(tool.id)} onClick={() => toggleTool(tool.id)}><Wrench size={12} /> {tool.label}</button>)}
+              </div>}
             </>}
-
-            <div className="resolved-runtime"><span>Resolved for this node</span><strong>{effectiveModel} · {effectiveEffort}{supportsTools ? ` · ${effectiveTools.length} tools` : ''}</strong></div>
           </section>}
 
           {node.data.subworkflow && <section className="form-section inspector-section-card nested-workflow-settings">

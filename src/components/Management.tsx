@@ -79,13 +79,19 @@ const pageLabels: Record<Exclude<AppPage, 'builder'>, string> = {
   runs: 'Runs',
 }
 
-const navItems = [
-  { id: 'workflows', label: 'Workflows', icon: Workflow },
-  { id: 'components', label: 'Components', icon: Blocks },
-  { id: 'projects', label: 'Configure', icon: Settings2 },
-  { id: 'templates', label: 'Templates', icon: Layers3 },
-  { id: 'catalysts', label: 'Catalysts', icon: Zap },
-  { id: 'runs', label: 'Runs', icon: Activity },
+const navSections = [
+  { label: 'Build', items: [
+    { id: 'catalysts', label: 'Catalysts', icon: Zap },
+    { id: 'components', label: 'Components', icon: Blocks },
+    { id: 'workflows', label: 'Workflows', icon: Workflow },
+  ] },
+  { label: 'Setup', items: [
+    { id: 'projects', label: 'Configure', icon: Settings2 },
+    { id: 'templates', label: 'Templates', icon: Layers3 },
+  ] },
+  { label: 'Operations', items: [
+    { id: 'runs', label: 'Runs', icon: Activity },
+  ] },
 ] as const
 
 const componentIconOptions = [
@@ -159,14 +165,13 @@ export function Management({
       <div className="management-body">
         <aside className="management-nav">
           <nav>
-            {navItems.map((item) => {
-              const Icon = item.icon
-              return (
-                <button key={item.id} className={page === item.id ? 'active' : ''} onClick={() => onNavigate(item.id)}>
-                  <Icon size={16} /> {item.label}
-                </button>
-              )
-            })}
+            {navSections.map((section) => <section className="management-nav-section" key={section.label}>
+              <h2>{section.label}</h2>
+              {section.items.map((item) => {
+                const Icon = item.icon
+                return <button key={item.id} className={page === item.id ? 'active' : ''} onClick={() => onNavigate(item.id)}><Icon size={16} /> {item.label}</button>
+              })}
+            </section>)}
           </nav>
           <div className="nav-help">
             <ShieldCheck size={17} />
