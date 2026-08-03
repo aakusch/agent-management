@@ -22,6 +22,18 @@
         "commands.test": "",
         "preview.url": "",
         "visual.tolerance": ""
+      },
+      "defaults": {
+        "model": "auto",
+        "effort": "medium",
+        "maxParallelAgents": 3,
+        "tools": ["filesystem", "terminal", "git"]
+      },
+      "permissions": {
+        "spawnAgents": true,
+        "shell": "project",
+        "network": "ask",
+        "publish": "ask"
       }
     },
     "nodes": [
@@ -378,6 +390,9 @@
     "eventLog": ".relay/runs/{{run.id}}/events.jsonl",
     "artifactDirectory": ".relay/runs/{{run.id}}/artifacts",
     "checkpointAfterEachNode": true,
+    "defaultModel": "auto",
+    "defaultEffort": "medium",
+    "tools": ["filesystem", "terminal", "git"],
     "stopConditions": {
       "maxTotalSteps": 24,
       "maxDurationMinutes": 60,

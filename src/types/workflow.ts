@@ -2,6 +2,22 @@ import type { Edge, Node } from '@xyflow/react'
 
 export type ComponentKind = 'agent' | 'judge' | 'router' | 'human' | 'tool' | 'workflow'
 export type NodeStatus = 'idle' | 'queued' | 'running' | 'passed' | 'failed'
+export type ReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh'
+export type RelayTool = 'filesystem' | 'terminal' | 'git' | 'browser' | 'web'
+
+export interface ExecutionDefaults {
+  model: string
+  effort: ReasoningEffort
+  maxParallelAgents: number
+  tools: RelayTool[]
+}
+
+export interface ProjectPermissions {
+  spawnAgents: boolean
+  shell: 'project' | 'read-only' | 'none'
+  network: 'ask' | 'allow' | 'deny'
+  publish: 'ask' | 'allow' | 'deny'
+}
 
 export interface ComponentTemplate {
   id: string
@@ -32,6 +48,11 @@ export interface WorkflowNodeData extends Record<string, unknown> {
   result?: string
   instruction: string
   overrides: Record<string, string>
+  execution?: {
+    model?: string
+    effort?: ReasoningEffort
+    tools?: RelayTool[]
+  }
   subworkflow?: {
     workflowId: string
     execution: 'inline' | 'isolated'
@@ -70,6 +91,8 @@ export interface ProjectContext {
   root: string
   branch: string
   variables: Record<string, string>
+  defaults: ExecutionDefaults
+  permissions: ProjectPermissions
 }
 
 export interface WorkflowDocument {
@@ -102,6 +125,9 @@ export interface RelayAssignmentBundle {
     eventLog: string
     artifactDirectory: string
     checkpointAfterEachNode: boolean
+    defaultModel: string
+    defaultEffort: ReasoningEffort
+    tools: RelayTool[]
     stopConditions: {
       maxTotalSteps: number
       maxDurationMinutes: number

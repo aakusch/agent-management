@@ -41,6 +41,8 @@ Instructions may reference variables with `{{path.to.value}}`. Compilation resol
 
 The saved workflow contains project bindings, node positions, component references/overrides, and conditional edges. View data can travel with the workflow without affecting execution semantics.
 
+Project bindings also declare the default model identifier, reasoning effort, maximum parallel agents, tool allowlist, and permission ceiling. An agent or judge node may override model, effort, or tools for that instance. Missing node values mean inherit; an explicit custom tool array, including an empty array, replaces the project tool defaults. The compiler records the resolved value and its source in the immutable execution plan.
+
 Edges are first-class transitions. Their routing trigger, condition, priority, delay, blocked behavior, payload selection, and loop policy belong to the workflow connection—not to either reusable component. This lets the same review component receive full artifacts in one workflow, a summary in another, and wait for human approval in a third without forking its Markdown source.
 
 The transition boundary is intentional:
@@ -49,6 +51,8 @@ The transition boundary is intentional:
 - Node instances declare project-specific overrides.
 - Transitions declare when execution moves and which outputs cross that boundary.
 - Run configuration declares temporary operator policy for one invocation.
+- Project configuration declares repository-wide runtime defaults and the maximum permission boundary.
+- Agent and judge nodes may narrow or replace their inherited runtime selection for one workflow step.
 
 See [`workflow.schema.json`](workflow.schema.json) and the example in [`../workflows/ui-quality-loop.json`](../workflows/ui-quality-loop.json).
 

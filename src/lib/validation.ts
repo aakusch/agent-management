@@ -3,6 +3,8 @@ import { isRecord, isStringArray } from './storage'
 
 const componentKinds = new Set(['agent', 'judge', 'router', 'human', 'tool', 'workflow'])
 const nodeStatuses = new Set(['idle', 'queued', 'running', 'passed', 'failed'])
+const reasoningEfforts = new Set(['low', 'medium', 'high', 'xhigh'])
+const relayTools = new Set(['filesystem', 'terminal', 'git', 'browser', 'web'])
 
 const isFinitePosition = (value: unknown) => isRecord(value)
   && typeof value.x === 'number'
@@ -11,12 +13,26 @@ const isFinitePosition = (value: unknown) => isRecord(value)
   && Number.isFinite(value.y)
 
 export function isProjectContext(value: unknown): value is ProjectContext {
-  return isRecord(value)
+  const baseValid = isRecord(value)
     && typeof value.name === 'string'
     && typeof value.root === 'string'
     && typeof value.branch === 'string'
     && isRecord(value.variables)
     && Object.values(value.variables).every((item) => typeof item === 'string')
+  if (!baseValid) return false
+  if (value.defaults !== undefined && (!isRecord(value.defaults)
+    || typeof value.defaults.model !== 'string'
+    || typeof value.defaults.effort !== 'string'
+    || !reasoningEfforts.has(value.defaults.effort)
+    || typeof value.defaults.maxParallelAgents !== 'number'
+    || !Array.isArray(value.defaults.tools)
+    || !value.defaults.tools.every((tool) => typeof tool === 'string' && relayTools.has(tool)))) return false
+  if (value.permissions !== undefined && (!isRecord(value.permissions)
+    || typeof value.permissions.spawnAgents !== 'boolean'
+    || !['project', 'read-only', 'none'].includes(String(value.permissions.shell))
+    || !['ask', 'allow', 'deny'].includes(String(value.permissions.network))
+    || !['ask', 'allow', 'deny'].includes(String(value.permissions.publish)))) return false
+  return true
 }
 
 export function isComponentTemplate(value: unknown): value is ComponentTemplate {
@@ -51,6 +67,7 @@ export function isWorkflowDocument(value: unknown): value is WorkflowDocument {
     || value.edges.length > 2_000) return false
 
   const nodeIds = new Set<string>()
+  const projectTools: Set<string> | null = value.project.defaults ? new Set(value.project.defaults.tools) : null
   for (const node of value.nodes) {
     if (!isRecord(node)
       || typeof node.id !== 'string'
@@ -71,6 +88,10 @@ export function isWorkflowDocument(value: unknown): value is WorkflowDocument {
       || typeof node.data.instruction !== 'string'
       || !isRecord(node.data.overrides)
       || !Object.values(node.data.overrides).every((item) => typeof item === 'string')) return false
+    if (node.data.execution !== undefined && (!isRecord(node.data.execution)
+      || (node.data.execution.model !== undefined && typeof node.data.execution.model !== 'string')
+      || (node.data.execution.effort !== undefined && (typeof node.data.execution.effort !== 'string' || !reasoningEfforts.has(node.data.execution.effort)))
+      || (node.data.execution.tools !== undefined && (!Array.isArray(node.data.execution.tools) || !node.data.execution.tools.every((tool) => typeof tool === 'string' && relayTools.has(tool) && (!projectTools || projectTools.has(tool))))))) return false
     nodeIds.add(node.id)
   }
 

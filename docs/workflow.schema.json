@@ -12,12 +12,34 @@
     "updatedAt": { "type": "string", "format": "date-time" },
     "project": {
       "type": "object",
-      "required": ["name", "root", "branch", "variables"],
+      "required": ["name", "root", "branch", "variables", "defaults", "permissions"],
       "properties": {
         "name": { "type": "string" },
         "root": { "type": "string" },
         "branch": { "type": "string" },
-        "variables": { "type": "object", "additionalProperties": { "type": "string" } }
+        "variables": { "type": "object", "additionalProperties": { "type": "string" } },
+        "defaults": {
+          "type": "object",
+          "required": ["model", "effort", "maxParallelAgents", "tools"],
+          "properties": {
+            "model": { "type": "string", "minLength": 1 },
+            "effort": { "enum": ["low", "medium", "high", "xhigh"] },
+            "maxParallelAgents": { "type": "integer", "minimum": 1, "maximum": 16 },
+            "tools": { "type": "array", "items": { "enum": ["filesystem", "terminal", "git", "browser", "web"] }, "uniqueItems": true }
+          },
+          "additionalProperties": false
+        },
+        "permissions": {
+          "type": "object",
+          "required": ["spawnAgents", "shell", "network", "publish"],
+          "properties": {
+            "spawnAgents": { "type": "boolean" },
+            "shell": { "enum": ["project", "read-only", "none"] },
+            "network": { "enum": ["ask", "allow", "deny"] },
+            "publish": { "enum": ["ask", "allow", "deny"] }
+          },
+          "additionalProperties": false
+        }
       },
       "additionalProperties": false
     },
@@ -44,6 +66,15 @@
               "kind": { "enum": ["agent", "judge", "router", "human", "tool", "workflow"] },
               "instruction": { "type": "string" },
               "overrides": { "type": "object", "additionalProperties": { "type": "string" } },
+              "execution": {
+                "type": "object",
+                "properties": {
+                  "model": { "type": "string" },
+                  "effort": { "enum": ["low", "medium", "high", "xhigh"] },
+                  "tools": { "type": "array", "items": { "enum": ["filesystem", "terminal", "git", "browser", "web"] }, "uniqueItems": true }
+                },
+                "additionalProperties": false
+              },
               "subworkflow": {
                 "type": "object",
                 "required": ["workflowId", "execution", "context", "onFailure"],

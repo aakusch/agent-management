@@ -13,6 +13,18 @@
       "commands.test": "",
       "preview.url": "",
       "visual.tolerance": ""
+    },
+    "defaults": {
+      "model": "auto",
+      "effort": "medium",
+      "maxParallelAgents": 3,
+      "tools": ["filesystem", "terminal", "git"]
+    },
+    "permissions": {
+      "spawnAgents": true,
+      "shell": "project",
+      "network": "ask",
+      "publish": "ask"
     }
   },
   "nodes": [

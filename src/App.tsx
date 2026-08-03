@@ -27,7 +27,7 @@ import {
   Moon,
   MoreHorizontal,
   Play,
-  Plus,
+  Settings2,
   Sparkles,
   Sun,
 } from 'lucide-react'
@@ -38,10 +38,11 @@ import { StartRunModal, type RunConfiguration } from './components/StartRunModal
 import { TransitionInspector } from './components/TransitionInspector'
 import { WorkflowEdge } from './components/WorkflowEdge'
 import { WorkflowNode } from './components/WorkflowNode'
+import { WorkflowToolbar } from './components/WorkflowToolbar'
 import { componentById, componentLibrary } from './data/library'
 import { builtInTemplates } from './data/templates'
 import { isRecord, readStored, removeStored, writeStored } from './lib/storage'
-import { isComponentTemplate, isProjectContext, parseWorkflowImport } from './lib/validation'
+import { isComponentTemplate, isProjectContext, isWorkflowDocument, parseWorkflowImport } from './lib/validation'
 import type {
   ComponentTemplate,
   ProjectContext,
@@ -144,7 +145,29 @@ const projectSeed: ProjectContext = {
     'preview.url': '',
     'visual.tolerance': '',
   },
+  defaults: {
+    model: 'auto',
+    effort: 'medium',
+    maxParallelAgents: 3,
+    tools: ['filesystem', 'terminal', 'git'],
+  },
+  permissions: {
+    spawnAgents: true,
+    shell: 'project',
+    network: 'ask',
+    publish: 'ask',
+  },
 }
+
+const normalizeProject = (project: ProjectContext): ProjectContext => ({
+  ...project,
+  defaults: {
+    ...projectSeed.defaults,
+    ...(project.defaults ?? {}),
+    tools: project.defaults?.tools ?? projectSeed.defaults.tools,
+  },
+  permissions: { ...projectSeed.permissions, ...(project.permissions ?? {}) },
+})
 
 const starterWorkflow: WorkflowRecord = {
   id: 'implementation-quality-loop',
@@ -176,6 +199,7 @@ function nodeFromTemplate(
       status: 'idle',
       instruction: template.instruction,
       overrides: {},
+      execution: {},
       subworkflow: template.workflowId ? {
         workflowId: template.workflowId,
         execution: 'isolated',
@@ -290,11 +314,18 @@ function graphFromTemplate(template: WorkflowTemplate | undefined, components: C
 }
 
 function Workspace({ project, onUpdateProject, components, onImportComponents, onNavigate, theme, onToggleTheme, onWorkflowSaved, onPrepareRun, startingTemplate, workflows }: WorkspaceProps) {
-  const startingGraph = graphFromTemplate(startingTemplate, components)
+  const expectedWorkflowId = startingTemplate?.id ?? 'implementation-quality-loop'
+  const [startingDocument] = useState<WorkflowDocument | null>(() => readStored<WorkflowDocument | null>(
+    'relay.workflow', null, (value): value is WorkflowDocument | null => value === null || isWorkflowDocument(value),
+  ))
+  const restoredDocument = startingDocument?.id === expectedWorkflowId ? startingDocument : null
+  const startingGraph = restoredDocument
+    ? { nodes: restoredDocument.nodes, edges: restoredDocument.edges }
+    : graphFromTemplate(startingTemplate, components)
   const [nodes, setNodes, onNodesChange] = useNodesState(startingGraph.nodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(startingGraph.edges)
-  const [workflowName, setWorkflowName] = useState(startingTemplate?.name ?? 'Implementation quality loop')
-  const [workflowId] = useState(startingTemplate?.id ?? 'implementation-quality-loop')
+  const [workflowName, setWorkflowName] = useState(restoredDocument?.name ?? startingTemplate?.name ?? 'Implementation quality loop')
+  const [workflowId] = useState(expectedWorkflowId)
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
   const [libraryOpen, setLibraryOpen] = useState(true)
@@ -303,6 +334,7 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
   const [saveState, setSaveState] = useState<'saved' | 'saving'>('saved')
   const [toast, setToast] = useState<{ message: string; tone: 'success' | 'error' } | null>(null)
   const [overflowOpen, setOverflowOpen] = useState(false)
+  const [minimapVisible, setMinimapVisible] = useState(true)
   const importInput = useRef<HTMLInputElement>(null)
   const overflowRef = useRef<HTMLDivElement>(null)
   const toastTimer = useRef<number | null>(null)
@@ -439,11 +471,14 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
       driver: {
         protocol: 'relay-driver-v1',
         role: 'Own the workflow state, dispatch configured agents, evaluate deterministic routes, persist every event, and stop only under the declared policy.',
-        concurrency: 3,
+        concurrency: project.defaults.maxParallelAgents,
         stateDirectory: '.relay/runs/{{run.id}}',
         eventLog: '.relay/runs/{{run.id}}/events.jsonl',
         artifactDirectory: '.relay/runs/{{run.id}}/artifacts',
         checkpointAfterEachNode: true,
+        defaultModel: project.defaults.model,
+        defaultEffort: project.defaults.effort,
+        tools: project.defaults.tools,
         stopConditions: {
           maxTotalSteps: 24,
           maxDurationMinutes: 60,
@@ -451,29 +486,26 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
           requireHumanOnExhaustion: true,
         },
         permissions: {
-          spawnAgents: true,
-          shell: 'project',
-          network: 'ask',
-          publish: 'ask',
+          ...project.permissions,
         },
       },
     }
-  }, [authoringComponents, documentForExport, kickoffTask, nodes, workflowName])
+  }, [authoringComponents, documentForExport, kickoffTask, nodes, project, workflowName])
 
   const saveWorkflow = useCallback(async () => {
     if (!workflowName.trim()) {
       showToast('Add a workflow name before saving.', 'error')
-      return
+      return false
     }
     if (!nodes.length) {
       showToast('Add at least one component before saving.', 'error')
-      return
+      return false
     }
     setSaveState('saving')
     if (!writeStored('relay.workflow', documentForExport())) {
       setSaveState('saved')
       showToast('Could not save in this browser. Check storage permissions.', 'error')
-      return
+      return false
     }
     onWorkflowSaved({
       id: workflowId,
@@ -489,6 +521,7 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
     await sleep(350)
     setSaveState('saved')
     showToast('Workflow saved locally')
+    return true
   }, [documentForExport, nodes, onWorkflowSaved, project.name, project.root, showToast, workflowId, workflowName])
 
   const exportWorkflow = useCallback(() => {
@@ -502,13 +535,32 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
     showToast('Driver-ready assignment exported')
   }, [assignmentForExport, showToast, workflowName])
 
+  const openProjectConfig = useCallback(async () => {
+    const saved = await saveWorkflow()
+    if (saved) onNavigate('projects')
+  }, [onNavigate, saveWorkflow])
+
+  const validateWorkflow = useCallback(() => {
+    if (!nodes.length) {
+      showToast('Add at least one component before validating.', 'error')
+      return
+    }
+    const nodeIds = new Set(nodes.map((node) => node.id))
+    const brokenEdge = edges.find((item) => !nodeIds.has(item.source) || !nodeIds.has(item.target))
+    if (brokenEdge) {
+      showToast(`Transition ${brokenEdge.id} references a missing component.`, 'error')
+      return
+    }
+    showToast(`Workflow valid · ${nodes.length} components · ${edges.length} transitions`)
+  }, [edges, nodes, showToast])
+
   const importWorkflow = useCallback(async (file: File) => {
     try {
       if (file.size > 5 * 1024 * 1024) throw new Error('The file is larger than the 5 MB import limit.')
       const { workflow: imported, components: importedComponents } = parseWorkflowImport(await file.text())
       setNodes(imported.nodes)
       setEdges(imported.edges)
-      onUpdateProject(imported.project)
+      onUpdateProject(normalizeProject(imported.project))
       if (importedComponents.length) onImportComponents(importedComponents)
       setWorkflowName(imported.name)
       setSelectedNodeId(null)
@@ -559,7 +611,7 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
         </div>
         <div className="topbar-actions">
           <button className="subtle-button header-action" onClick={() => onNavigate('templates')}><LayoutTemplate size={15} /> Templates</button>
-          <button className="subtle-button header-action" onClick={() => onNavigate('projects')}><Plus size={15} /> Variable</button>
+          <button className="subtle-button header-action" onClick={() => void openProjectConfig()}><Settings2 size={15} /> Configure</button>
           <button className="run-button" onClick={() => setStartRunOpen(true)}><Play size={14} fill="currentColor" /> Run workflow</button>
           <input
             ref={importInput}
@@ -600,6 +652,12 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
         )}
 
         <section className="canvas-shell">
+          <WorkflowToolbar
+            minimapVisible={minimapVisible}
+            onFitView={() => void fitView({ padding: 0.17, duration: 450 })}
+            onValidate={validateWorkflow}
+            onToggleMinimap={() => setMinimapVisible((visible) => !visible)}
+          />
           <ReactFlow
             nodes={nodes}
             edges={edges}
@@ -623,13 +681,13 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
           >
             <Background variant={BackgroundVariant.Dots} gap={24} size={1.2} color={theme === 'light' ? '#cbd3d8' : '#252a31'} />
             <Controls position="bottom-left" showInteractive={false} />
-            <MiniMap
+            {minimapVisible && <MiniMap
               position="bottom-right"
               pannable
               zoomable
               nodeColor={(node) => `var(--${String(node.data?.color ?? 'mint')})`}
               maskColor={theme === 'light' ? 'rgba(236, 240, 242, .78)' : 'rgba(7, 9, 12, .76)'}
-            />
+            />}
           </ReactFlow>
 
           <div className="canvas-tip"><Box size={14} /> Drag components onto the canvas · connect handles to define flow</div>
@@ -638,9 +696,10 @@ function Workspace({ project, onUpdateProject, components, onImportComponents, o
         <Inspector
           node={selectedNode}
           project={project}
+          sourceInstruction={selectedNode ? componentLookup[selectedNode.data.templateId]?.instruction ?? selectedNode.data.instruction : ''}
           onClose={() => setSelectedNodeId(null)}
           onUpdateNode={updateNode}
-          onUpdateProject={(nextProject) => { onUpdateProject(nextProject); setSaveState('saving') }}
+          onOpenProjectConfig={() => void openProjectConfig()}
         />
         <TransitionInspector
           edge={selectedEdge}
@@ -668,7 +727,7 @@ export default function App() {
   const [theme, setTheme] = useState<'dark' | 'light'>(readTheme)
   const [project, setProject] = useState<ProjectContext>(() => {
     const parsed = readStored('relay.project', projectSeed, isProjectContext)
-    return parsed.name === 'Acme storefront' && parsed.root === './' ? projectSeed : parsed
+    return parsed.name === 'Acme storefront' && parsed.root === './' ? projectSeed : normalizeProject(parsed)
   })
   const [customComponents, setCustomComponents] = useState<ComponentTemplate[]>(() => readStored(
     'relay.components', [], (value): value is ComponentTemplate[] => Array.isArray(value) && value.every(isComponentTemplate),
@@ -785,7 +844,7 @@ export default function App() {
       templates={[...userTemplates, ...builtInTemplates]}
       onCreateTemplate={(template) => setUserTemplates((current) => [template, ...current.filter((item) => item.id !== template.id)])}
       onToggleTemplatePublished={(id) => setUserTemplates((current) => current.map((template) => template.id === id ? { ...template, published: !template.published } : template))}
-      onUseTemplate={(template) => { setBuilderTemplate(template); navigate('builder') }}
+      onUseTemplate={(template) => { removeStored('relay.workflow'); setBuilderTemplate(template); navigate('builder') }}
       pendingRun={pendingRun}
       monitorBoard={monitorBoard}
       onUpdateMonitorBoard={setMonitorBoard}

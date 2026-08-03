@@ -45,7 +45,7 @@
     },
     "driver": {
       "type": "object",
-      "required": ["protocol", "role", "concurrency", "stateDirectory", "eventLog", "artifactDirectory", "checkpointAfterEachNode", "stopConditions", "permissions"],
+      "required": ["protocol", "role", "concurrency", "stateDirectory", "eventLog", "artifactDirectory", "checkpointAfterEachNode", "defaultModel", "defaultEffort", "tools", "stopConditions", "permissions"],
       "properties": {
         "protocol": { "const": "relay-driver-v1" },
         "role": { "type": "string" },
@@ -54,6 +54,9 @@
         "eventLog": { "type": "string" },
         "artifactDirectory": { "type": "string" },
         "checkpointAfterEachNode": { "type": "boolean" },
+        "defaultModel": { "type": "string", "minLength": 1 },
+        "defaultEffort": { "enum": ["low", "medium", "high", "xhigh"] },
+        "tools": { "type": "array", "items": { "enum": ["filesystem", "terminal", "git", "browser", "web"] }, "uniqueItems": true },
         "stopConditions": {
           "type": "object",
           "required": ["maxTotalSteps", "maxDurationMinutes", "stopOnNoProgress", "requireHumanOnExhaustion"],

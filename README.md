@@ -13,6 +13,8 @@ The board is the editor. Markdown files are the source of truth. A workflow conn
 - Parallel review branches, labeled decision routes, and a visible revision loop
 - Selectable transitions with independent triggers, payload routing, delay, blocked behavior, priority, and loop policy
 - Per-node instruction overrides plus project-level variables
+- Per-node model, reasoning-effort, and tool overrides with visible inherited values
+- A project configuration surface for directory, branch, runtime defaults, tool allowlists, permissions, and variables
 - Local save and portable JSON import/export
 - Defensive browser persistence that recovers from malformed or unavailable local storage
 - Bounded, schema-aware workflow imports that reject duplicate nodes and broken edge references
@@ -68,9 +70,9 @@ A workflow references that component and adds only instance-specific configurati
 ```text
 component defaults
   → workspace profile
-    → project context
-      → workflow node overrides
-        → run inputs
+    → project context + runtime defaults
+      → workflow node prompt/model/tool overrides
+        → run inputs and temporary policy
 ```
 
 That makes reuse practical: improving `visual-judge.md` improves every workflow that accepts the new version, while a project can still define its own preview URL, commands, tolerance, repository instructions, and task.

@@ -4,6 +4,8 @@
 
 Export a single self-contained `*.relay.json` assignment for handoff. It contains the task, workflow graph, project binding, exact Markdown components, loop policies, permissions, and driver limits.
 
+The driver resolves runtime settings in a predictable order: project model, effort, and tool defaults first; explicit node overrides second; temporary run limits last. Node tool overrides may narrow the project allowlist but cannot bypass the project permission ceiling. The assignment-level `defaultModel`, `defaultEffort`, and `tools` fields let a CLI validate this resolution before spawning workers.
+
 JSON is the canonical format because an agent or CLI can validate it without interpreting document layout. Markdown remains the authoring format and is embedded verbatim in the bundle. A future `*.relaypack` can be a ZIP container for large references, screenshots, fixtures, or scripts; its root file should still be `assignment.relay.json`.
 
 The prompt handed to the driver can stay small:

@@ -12,10 +12,14 @@ import {
   CircleDot,
   CircleUserRound,
   Clock3,
+  Cpu,
   FileCode2,
   FileCheck2,
   FolderGit2,
   GitFork,
+  GitBranch,
+  Globe2,
+  HardDrive,
   Eye,
   Layers3,
   KeyRound,
@@ -28,13 +32,15 @@ import {
   Sparkles,
   Sun,
   TerminalSquare,
+  Trash2,
   Webhook,
   Zap,
   WandSparkles,
   Workflow,
+  Wrench,
   X,
 } from 'lucide-react'
-import type { ComponentKind, ComponentTemplate, ProjectContext } from '../types/workflow'
+import type { ComponentKind, ComponentTemplate, ProjectContext, ReasoningEffort, RelayTool } from '../types/workflow'
 import type { CatalystDefinition, CatalystKind, PendingRun, RunMonitorBoard, WorkflowRecord, WorkflowTemplate } from '../types/catalog'
 import { RunBoard } from './RunBoard'
 
@@ -66,7 +72,7 @@ const pageLabels: Record<Exclude<AppPage, 'builder'>, string> = {
   dashboard: 'Dashboard',
   workflows: 'Workflows',
   components: 'Components',
-  projects: 'Projects',
+  projects: 'Configure',
   templates: 'Templates',
   catalysts: 'Catalysts',
   runs: 'Runs',
@@ -75,7 +81,7 @@ const pageLabels: Record<Exclude<AppPage, 'builder'>, string> = {
 const navItems = [
   { id: 'workflows', label: 'Workflows', icon: Workflow },
   { id: 'components', label: 'Components', icon: Blocks },
-  { id: 'projects', label: 'Projects', icon: FolderGit2 },
+  { id: 'projects', label: 'Configure', icon: Settings2 },
   { id: 'templates', label: 'Templates', icon: Layers3 },
   { id: 'catalysts', label: 'Catalysts', icon: Zap },
   { id: 'runs', label: 'Runs', icon: Activity },
@@ -96,6 +102,13 @@ const componentIconOptions = [
 ] as const
 
 const componentColors = ['mint', 'blue', 'violet', 'amber', 'coral', 'rose', 'cyan'] as const
+const projectTools: { id: RelayTool; label: string; detail: string }[] = [
+  { id: 'filesystem', label: 'Files', detail: 'Read and edit within the project.' },
+  { id: 'terminal', label: 'Terminal', detail: 'Run approved project commands.' },
+  { id: 'git', label: 'Git', detail: 'Inspect diffs, branches, and history.' },
+  { id: 'browser', label: 'Browser', detail: 'Test local interfaces and flows.' },
+  { id: 'web', label: 'Web', detail: 'Access permitted external sources.' },
+]
 
 function ComponentIcon({ icon, size = 14 }: { icon: string; size?: number }) {
   const Icon = componentIconOptions.find((item) => item.id === icon)?.Icon ?? Bot
@@ -134,7 +147,7 @@ export function Management({
         <div className="topbar-divider" />
         <span className="topbar-page">{pageLabels[page]}</span>
         <div className="topbar-actions">
-          <button className="subtle-button" onClick={() => onNavigate('projects')}><FolderGit2 size={15} /> {project.name}</button>
+          <button className="subtle-button" onClick={() => onNavigate('projects')}><Settings2 size={15} /> {project.root ? project.name : 'Configure project'}</button>
           <button className="icon-button theme-toggle" onClick={onToggleTheme} aria-label={`Use ${theme === 'dark' ? 'light' : 'dark'} theme`}>
             {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
           </button>
@@ -317,21 +330,89 @@ function ComponentsPage({ components, onCreate }: { components: ComponentTemplat
 function ProjectsPage({ project, onUpdate }: { project: ProjectContext; onUpdate: (project: ProjectContext) => void }) {
   const variables = Object.entries(project.variables)
   const connected = Boolean(project.root)
+  const updateDefaults = (patch: Partial<ProjectContext['defaults']>) => onUpdate({ ...project, defaults: { ...project.defaults, ...patch } })
+  const updatePermissions = (patch: Partial<ProjectContext['permissions']>) => onUpdate({ ...project, permissions: { ...project.permissions, ...patch } })
   const updateVariable = (oldKey: string, key: string, value: string) => {
     const next = { ...project.variables }
     delete next[oldKey]
     next[key] = value
     onUpdate({ ...project, variables: next })
   }
-  return <div className="page-wrap"><PageHeading eyebrow="Context and permissions" title="Projects" description="Teach workflows about a repository once. Every component receives only the context and capabilities it needs." />
-    <div className="project-grid"><section className="surface project-card"><div className="surface-heading"><div><span className="eyebrow">Local project</span><h2>{connected ? project.name : 'Connect a repository'}</h2></div><span className={`status-chip ${connected ? 'ready' : 'draft'}`}><CircleDot size={12} /> {connected ? 'Connected' : 'Not connected'}</span></div><div className="editor-form"><label><span>Display name</span><input value={project.name === 'No project selected' ? '' : project.name} onChange={(event) => onUpdate({ ...project, name: event.target.value || 'No project selected' })} placeholder="Remember" /></label><label><span>Repository root</span><input value={project.root} onChange={(event) => onUpdate({ ...project, root: event.target.value })} placeholder="/Users/you/Desktop/Repos/project" /></label><label><span>Working branch</span><input value={project.branch} onChange={(event) => onUpdate({ ...project, branch: event.target.value })} placeholder="main" /></label></div></section>
-      <section className="surface policy-card"><div className="surface-heading"><div><span className="eyebrow">Driver policy</span><h2>Capabilities</h2></div><Settings2 size={17} /></div><PolicyRow label="Spawn configured agents" value="Allowed" /><PolicyRow label="Shell access" value="Project only" /><PolicyRow label="Network access" value="Ask first" /><PolicyRow label="Publish changes" value="Ask first" /></section>
+  const addVariable = () => {
+    let key = 'new.variable'
+    let suffix = 2
+    while (key in project.variables) {
+      key = `new.variable.${suffix}`
+      suffix += 1
+    }
+    onUpdate({ ...project, variables: { ...project.variables, [key]: '' } })
+  }
+  const removeVariable = (key: string) => {
+    const next = { ...project.variables }
+    delete next[key]
+    onUpdate({ ...project, variables: next })
+  }
+  const toggleTool = (tool: RelayTool) => updateDefaults({
+    tools: project.defaults.tools.includes(tool)
+      ? project.defaults.tools.filter((item) => item !== tool)
+      : [...project.defaults.tools, tool],
+  })
+
+  return <div className="page-wrap configure-page">
+    <PageHeading eyebrow="Workspace defaults" title="Configure project" description="Set the repository context and execution defaults once. Individual workflow components can inherit these values or override them explicitly." />
+
+    <div className="configuration-summary" role="status">
+      <div><span className={`configuration-status ${connected ? 'connected' : ''}`}><CircleDot size={13} /> {connected ? 'Project connected' : 'Directory required'}</span><strong>{connected ? project.root : 'Choose the directory the local runner should open.'}</strong></div>
+      <div><span>Default runtime</span><strong>{project.defaults.model} · {project.defaults.effort} effort · {project.defaults.maxParallelAgents} parallel</strong></div>
+      <div><span>Tools enabled</span><strong>{project.defaults.tools.length || 'None'}</strong></div>
     </div>
-    <section className="surface variables-surface"><div className="surface-heading"><div><span className="eyebrow">Reusable values</span><h2>Project variables</h2></div><button className="secondary-cta" onClick={() => onUpdate({ ...project, variables: { ...project.variables, 'new.variable': '' } })}><Plus size={14} /> Add variable</button></div><p>These fill matching placeholders such as <code>{'{{preview.url}}'}</code> before an assignment is handed to the driver.</p>{variables.map(([key, value]) => <div className="variable-row" key={key}><input value={key} onChange={(event) => updateVariable(key, event.target.value, value)} /><input value={value} onChange={(event) => updateVariable(key, key, event.target.value)} /></div>)}</section>
+
+    <div className="configure-grid">
+      <section className="surface configure-card repository-settings">
+        <div className="configure-card-heading"><span><HardDrive size={17} /></span><div><span className="eyebrow">Repository</span><h2>Directory and branch</h2><p>The CLI runner uses this as its working boundary.</p></div></div>
+        <div className="editor-form">
+          <label><span>Display name</span><input value={project.name === 'No project selected' ? '' : project.name} onChange={(event) => onUpdate({ ...project, name: event.target.value || 'No project selected' })} placeholder="Remember" /></label>
+          <label><span>Repository directory <em>Required to execute</em></span><div className="input-with-icon"><FolderGit2 size={14} /><input value={project.root} onChange={(event) => onUpdate({ ...project, root: event.target.value })} placeholder="/Users/you/Desktop/Repos/project" /></div></label>
+          <label><span>Working branch</span><div className="input-with-icon"><GitBranch size={14} /><input value={project.branch} onChange={(event) => onUpdate({ ...project, branch: event.target.value })} placeholder="main or inherit current branch" /></div></label>
+        </div>
+      </section>
+
+      <section className="surface configure-card runtime-defaults-card">
+        <div className="configure-card-heading"><span><Cpu size={17} /></span><div><span className="eyebrow">Agent runtime</span><h2>Model and effort</h2><p>Defaults for agent and judge components.</p></div></div>
+        <div className="editor-form">
+          <label><span>Default model</span><input list="project-model-suggestions" value={project.defaults.model} onChange={(event) => updateDefaults({ model: event.target.value })} placeholder="auto or provider/model-id" /><datalist id="project-model-suggestions"><option value="auto" /><option value="openai/model-id" /><option value="anthropic/model-id" /><option value="google/model-id" /></datalist><small>Use the exact model identifier understood by your runner, or <code>auto</code>.</small></label>
+          <label><span>Reasoning effort</span><select value={project.defaults.effort} onChange={(event) => updateDefaults({ effort: event.target.value as ReasoningEffort })}><option value="low">Low · faster</option><option value="medium">Medium · balanced</option><option value="high">High · thorough</option><option value="xhigh">X-high · deepest</option></select></label>
+          <label><span>Maximum parallel agents</span><div className="parallel-control"><input type="range" min="1" max="16" value={project.defaults.maxParallelAgents} onChange={(event) => updateDefaults({ maxParallelAgents: Number(event.target.value) })} /><strong>{project.defaults.maxParallelAgents}</strong></div></label>
+        </div>
+      </section>
+    </div>
+
+    <div className="configure-grid secondary-configure-grid">
+      <section className="surface configure-card tool-defaults-card">
+        <div className="configure-card-heading"><span><Wrench size={17} /></span><div><span className="eyebrow">Project allowlist</span><h2>Tools</h2><p>Components inherit these and may narrow them for one node.</p></div></div>
+        <div className="project-tool-grid">{projectTools.map((tool) => <button key={tool.id} className={project.defaults.tools.includes(tool.id) ? 'selected' : ''} aria-pressed={project.defaults.tools.includes(tool.id)} onClick={() => toggleTool(tool.id)}><span><Wrench size={14} /></span><div><strong>{tool.label}</strong><small>{tool.detail}</small></div><i /></button>)}</div>
+      </section>
+
+      <section className="surface configure-card permission-settings-card">
+        <div className="configure-card-heading"><span><ShieldCheck size={17} /></span><div><span className="eyebrow">Safety boundary</span><h2>Permissions</h2><p>A workflow can narrow these defaults, never widen them.</p></div></div>
+        <div className="permission-settings">
+          <label className="permission-toggle"><div><strong>Spawn configured agents</strong><small>Allow the driver to create child agents.</small></div><input type="checkbox" checked={project.permissions.spawnAgents} onChange={(event) => updatePermissions({ spawnAgents: event.target.checked })} /></label>
+          <label><div><strong>Shell access</strong><small>Maximum filesystem and command scope.</small></div><select value={project.permissions.shell} onChange={(event) => updatePermissions({ shell: event.target.value as ProjectContext['permissions']['shell'] })}><option value="project">Project only</option><option value="read-only">Read only</option><option value="none">None</option></select></label>
+          <label><div><strong>Network access</strong><small>Policy for outbound connections.</small></div><select value={project.permissions.network} onChange={(event) => updatePermissions({ network: event.target.value as ProjectContext['permissions']['network'] })}><option value="ask">Ask first</option><option value="allow">Allow</option><option value="deny">Deny</option></select></label>
+          <label><div><strong>Publish changes</strong><small>Pushes, releases, and external writes.</small></div><select value={project.permissions.publish} onChange={(event) => updatePermissions({ publish: event.target.value as ProjectContext['permissions']['publish'] })}><option value="ask">Ask first</option><option value="allow">Allow</option><option value="deny">Deny</option></select></label>
+        </div>
+      </section>
+    </div>
+
+    <section className="surface variables-surface configured-variables">
+      <div className="surface-heading"><div><span className="eyebrow">Reusable context</span><h2>Variables</h2></div><button className="secondary-cta" onClick={addVariable}><Plus size={14} /> Add variable</button></div>
+      <p>Values replace matching placeholders such as <code>{'{{preview.url}}'}</code> when the workflow is compiled. Secrets should remain references resolved by the runner.</p>
+      <div className="variable-table-heading"><span>Variable</span><span>Value</span><span /></div>
+      {variables.map(([key, value]) => <div className="variable-row" key={key}><input aria-label="Variable name" value={key} onChange={(event) => updateVariable(key, event.target.value, value)} /><input aria-label={`Value for ${key}`} value={value} onChange={(event) => updateVariable(key, key, event.target.value)} /><button onClick={() => removeVariable(key)} aria-label={`Remove ${key}`}><Trash2 size={14} /></button></div>)}
+      {!variables.length && <div className="variables-empty"><Globe2 size={17} /> No project variables yet. Add one when a component needs reusable context.</div>}
+    </section>
   </div>
 }
-
-function PolicyRow({ label, value }: { label: string; value: string }) { return <div className="policy-row"><span>{label}</span><strong>{value}</strong></div> }
 
 function TemplatesPage({ templates, onCreate, onTogglePublished, onUseTemplate }: { templates: WorkflowTemplate[]; onCreate: (template: WorkflowTemplate) => void; onTogglePublished: (id: string) => void; onUseTemplate: (template: WorkflowTemplate) => void }) {
   const [creating, setCreating] = useState(false)
