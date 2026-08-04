@@ -1,0 +1,346 @@
+{
+  "schemaVersion": "1.0",
+  "id": "meeting-to-pr",
+  "name": "Meeting to PR",
+  "description": "Take a change someone asked for in a BHG meeting through to a PR against develop, asking rather than guessing and leaving the merge to Aaron.",
+  "project": {
+    "name": "No project selected",
+    "root": "",
+    "branch": "",
+    "variables": {
+      "bhg.workspace": "~/Desktop/BHG",
+      "repos.root": "~/Desktop/Repos",
+      "catchup.command": "./catch-up",
+      "base.branch": "develop"
+    },
+    "defaults": {
+      "model": "auto",
+      "effort": "high",
+      "maxParallelAgents": 3,
+      "tools": [
+        "filesystem",
+        "terminal",
+        "git"
+      ]
+    },
+    "permissions": {
+      "spawnAgents": true,
+      "shell": "project",
+      "network": "ask",
+      "publish": "ask"
+    },
+    "profile": {
+      "status": "not-scanned",
+      "structure": "unknown",
+      "packageManager": "auto",
+      "capabilities": [],
+      "instructions": [
+        "AGENTS.md",
+        "CLAUDE.md"
+      ],
+      "commands": {}
+    }
+  },
+  "entry": {
+    "mode": "manual"
+  },
+  "specification": {
+    "enabled": true,
+    "componentId": "workflow-specifier",
+    "mode": "guided",
+    "artifact": "run-spec.json",
+    "maySelectOptionalModules": true,
+    "mayBindProjectCommands": true,
+    "mayConfigureNodes": true,
+    "mayRemoveRequiredModules": false,
+    "mayWidenPermissions": false
+  },
+  "nodes": [
+    {
+      "id": "request",
+      "type": "workflow",
+      "position": {
+        "x": 0,
+        "y": 216
+      },
+      "data": {
+        "label": "Meeting request",
+        "description": "Resolve the meeting, extract what was actually asked, ask Aaron if it is ambiguous.",
+        "templateId": "module-meeting-request",
+        "kind": "module",
+        "icon": "layers",
+        "color": "violet",
+        "status": "idle",
+        "instruction": "",
+        "overrides": {},
+        "execution": {},
+        "module": {
+          "moduleId": "meeting-request",
+          "version": "0.1.0",
+          "mode": "linked"
+        }
+      }
+    },
+    {
+      "id": "preflight",
+      "type": "workflow",
+      "position": {
+        "x": 384,
+        "y": 216
+      },
+      "data": {
+        "label": "Repository preflight",
+        "description": "Pick the repository, preserve uncommitted work, branch off develop, learn the conventions.",
+        "templateId": "module-repo-preflight",
+        "kind": "module",
+        "icon": "layers",
+        "color": "coral",
+        "status": "idle",
+        "instruction": "",
+        "overrides": {},
+        "execution": {},
+        "module": {
+          "moduleId": "repo-preflight",
+          "version": "0.1.0",
+          "mode": "linked"
+        }
+      }
+    },
+    {
+      "id": "implement",
+      "type": "workflow",
+      "position": {
+        "x": 768,
+        "y": 216
+      },
+      "data": {
+        "label": "Scoped implementation",
+        "description": "Implement exactly the planned change \u2014 nothing adjacent.",
+        "templateId": "scoped-implementation",
+        "kind": "agent",
+        "icon": "wand",
+        "color": "mint",
+        "status": "idle",
+        "instruction": "",
+        "overrides": {},
+        "execution": {}
+      }
+    },
+    {
+      "id": "verify",
+      "type": "workflow",
+      "position": {
+        "x": 1152,
+        "y": 216
+      },
+      "data": {
+        "label": "Verify and repair",
+        "description": "Typecheck, lint, build, tests. Each failure routes to one minimal repair, bounded to three passes.",
+        "templateId": "module-verify-and-repair",
+        "kind": "module",
+        "icon": "layers",
+        "color": "amber",
+        "status": "idle",
+        "instruction": "",
+        "overrides": {},
+        "execution": {},
+        "module": {
+          "moduleId": "verify-and-repair",
+          "version": "0.1.0",
+          "mode": "linked"
+        }
+      }
+    },
+    {
+      "id": "judge",
+      "type": "workflow",
+      "position": {
+        "x": 1536,
+        "y": 216
+      },
+      "data": {
+        "label": "Request verification",
+        "description": "Does the diff satisfy what the meeting asked for? Evidence, not vibes.",
+        "templateId": "request-verification",
+        "kind": "judge",
+        "icon": "eye",
+        "color": "violet",
+        "status": "idle",
+        "instruction": "",
+        "overrides": {},
+        "execution": {}
+      }
+    },
+    {
+      "id": "gate",
+      "type": "workflow",
+      "position": {
+        "x": 1920,
+        "y": 216
+      },
+      "data": {
+        "label": "Delivery gate",
+        "description": "Combine checks, tests, and the verdict into ship, revise, or escalate.",
+        "templateId": "delivery-gate",
+        "kind": "router",
+        "icon": "split",
+        "color": "cyan",
+        "status": "idle",
+        "instruction": "",
+        "overrides": {},
+        "execution": {}
+      }
+    },
+    {
+      "id": "deliver",
+      "type": "workflow",
+      "position": {
+        "x": 2304,
+        "y": 216
+      },
+      "data": {
+        "label": "PR handoff",
+        "description": "Open the PR to develop and hand back the brief. Merging stays with Aaron.",
+        "templateId": "module-pr-handoff",
+        "kind": "module",
+        "icon": "layers",
+        "color": "blue",
+        "status": "idle",
+        "instruction": "",
+        "overrides": {},
+        "execution": {},
+        "module": {
+          "moduleId": "pr-handoff",
+          "version": "0.1.0",
+          "mode": "linked"
+        }
+      }
+    },
+    {
+      "id": "escalate",
+      "type": "workflow",
+      "position": {
+        "x": 1920,
+        "y": 432
+      },
+      "data": {
+        "label": "Ask Aaron",
+        "description": "Bounded loop exhausted, or the call is Aaron\u2019s to make.",
+        "templateId": "ask-aaron",
+        "kind": "human",
+        "icon": "user-check",
+        "color": "amber",
+        "status": "idle",
+        "instruction": "",
+        "overrides": {},
+        "execution": {}
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "request-preflight",
+      "source": "request",
+      "target": "preflight",
+      "type": "workflow",
+      "data": {
+        "trigger": "always",
+        "handoff": "full",
+        "tone": "default"
+      }
+    },
+    {
+      "id": "preflight-implement",
+      "source": "preflight",
+      "target": "implement",
+      "type": "workflow",
+      "data": {
+        "trigger": "always",
+        "handoff": "full",
+        "tone": "default"
+      }
+    },
+    {
+      "id": "implement-verify",
+      "source": "implement",
+      "target": "verify",
+      "type": "workflow",
+      "data": {
+        "trigger": "always",
+        "handoff": "full",
+        "tone": "default"
+      }
+    },
+    {
+      "id": "verify-judge",
+      "source": "verify",
+      "target": "judge",
+      "type": "workflow",
+      "data": {
+        "trigger": "always",
+        "handoff": "full",
+        "tone": "default"
+      }
+    },
+    {
+      "id": "judge-gate",
+      "source": "judge",
+      "target": "gate",
+      "type": "workflow",
+      "data": {
+        "trigger": "always",
+        "handoff": "summary",
+        "tone": "default"
+      }
+    },
+    {
+      "id": "gate-deliver",
+      "source": "gate",
+      "target": "deliver",
+      "type": "workflow",
+      "data": {
+        "trigger": "condition",
+        "handoff": "full",
+        "tone": "success",
+        "label": "ship",
+        "condition": "route == ship"
+      }
+    },
+    {
+      "id": "gate-implement",
+      "source": "gate",
+      "target": "implement",
+      "type": "workflow",
+      "data": {
+        "trigger": "condition",
+        "handoff": "full",
+        "tone": "danger",
+        "label": "revise",
+        "condition": "route == revise",
+        "loop": {
+          "mode": "bounded",
+          "maxIterations": 3,
+          "maxDurationMinutes": 90,
+          "stopOnNoProgress": 2,
+          "onExhausted": "human"
+        }
+      },
+      "sourceHandle": "source-bottom",
+      "targetHandle": "target-bottom"
+    },
+    {
+      "id": "gate-escalate",
+      "source": "gate",
+      "target": "escalate",
+      "type": "workflow",
+      "data": {
+        "trigger": "condition",
+        "handoff": "summary",
+        "tone": "warning",
+        "label": "escalate",
+        "condition": "route == escalate"
+      }
+    }
+  ],
+  "updatedAt": "2026-08-04T04:17:40.326953Z"
+}

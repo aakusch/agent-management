@@ -187,32 +187,12 @@
             "type": "object",
             "properties": {
               "label": { "type": "string" },
-              "trigger": { "enum": ["always", "condition", "human", "delay"] },
-              "condition": { "type": "string" },
+              "trigger": { "enum": ["always", "condition", "human"] },
+              "condition": { "type": "string", "description": "Required in practice when trigger is \"condition\"." },
               "tone": { "enum": ["default", "success", "danger", "warning"] },
-              "payload": {
-                "type": "object",
-                "required": ["mode"],
-                "properties": {
-                  "mode": { "enum": ["all", "selected", "summary", "none"] },
-                  "include": { "type": "array", "items": { "type": "string" }, "uniqueItems": true }
-                },
-                "additionalProperties": false
-              },
-              "delaySeconds": { "type": "integer", "minimum": 0 },
-              "onBlocked": { "enum": ["wait", "skip", "fail"] },
-              "priority": { "type": "integer", "minimum": 0 },
               "handoff": {
-                "type": "object",
-                "required": ["mode", "required", "include", "onMissing"],
-                "properties": {
-                  "mode": { "enum": ["concise", "structured", "custom"] },
-                  "required": { "type": "boolean" },
-                  "include": { "type": "array", "items": { "enum": ["artifacts", "decisions", "verification", "risks", "open_questions", "next_action"] }, "uniqueItems": true },
-                  "instruction": { "type": "string" },
-                  "onMissing": { "enum": ["block", "auto-summary"] }
-                },
-                "additionalProperties": false
+                "enum": ["signal", "summary", "full"],
+                "description": "What the next step receives. One choice, not a field-by-field manifest. Documents saved before this simplification carried a payload object and a structured handoff object; both collapse into this on load."
               },
               "loop": {
                 "type": "object",

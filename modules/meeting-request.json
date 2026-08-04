@@ -1,0 +1,75 @@
+{
+  "id": "meeting-request",
+  "name": "Meeting request",
+  "color": "violet",
+  "description": "Turn \"what X said in the meeting\" into one attributed, unambiguous change request.",
+  "tags": [
+    "bhg",
+    "meetings",
+    "grounding",
+    "needs-review"
+  ],
+  "nodes": [
+    {
+      "id": "intake",
+      "componentId": "meeting-intake",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "description": "Resolve which meeting the objective means and load it."
+    },
+    {
+      "id": "extract",
+      "componentId": "request-extraction",
+      "position": {
+        "x": 384,
+        "y": 0
+      },
+      "description": "Extract the attributed request, its quotes, and the open questions."
+    },
+    {
+      "id": "clarify",
+      "componentId": "ask-aaron",
+      "position": {
+        "x": 768,
+        "y": 0
+      },
+      "description": "Only when the request has open questions that block implementation."
+    }
+  ],
+  "edges": [
+    {
+      "id": "intake-extract",
+      "source": "intake",
+      "target": "extract",
+      "data": {
+        "trigger": "always",
+        "handoff": "full",
+        "tone": "default"
+      }
+    },
+    {
+      "id": "extract-clarify",
+      "source": "extract",
+      "target": "clarify",
+      "data": {
+        "trigger": "condition",
+        "handoff": "summary",
+        "tone": "warning",
+        "label": "needs answers",
+        "condition": "open_questions > 0"
+      }
+    }
+  ],
+  "entryNodeIds": [
+    "intake"
+  ],
+  "exitNodeIds": [
+    "extract",
+    "clarify"
+  ],
+  "version": "0.1.0",
+  "icon": "layers",
+  "source": "user"
+}

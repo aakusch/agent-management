@@ -13,6 +13,23 @@ export function readStored<T>(
   }
 }
 
+/**
+ * Reads a stored collection, keeping the entries that still validate.
+ *
+ * Why: `readStored` is all-or-nothing, so one asset written by an older build (or a hand-edited
+ * file) used to discard the user's whole library. Per-item filtering loses only the bad entry.
+ */
+export function readStoredItems<T>(key: string, validate: (value: unknown) => value is T): T[] {
+  try {
+    const raw = window.localStorage.getItem(key)
+    if (!raw) return []
+    const parsed: unknown = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed.filter(validate) : []
+  } catch {
+    return []
+  }
+}
+
 export function writeStored(key: string, value: unknown): boolean {
   try {
     window.localStorage.setItem(key, JSON.stringify(value))

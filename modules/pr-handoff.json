@@ -1,0 +1,52 @@
+{
+  "id": "pr-handoff",
+  "name": "PR handoff",
+  "color": "blue",
+  "description": "Open the PR against the base branch and hand back an evidence-backed brief.",
+  "tags": [
+    "bhg",
+    "delivery",
+    "needs-review"
+  ],
+  "nodes": [
+    {
+      "id": "stage-pr",
+      "componentId": "pr-staging",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "description": "Commit, push the branch, open the PR. Merging stays with Aaron."
+    },
+    {
+      "id": "brief",
+      "componentId": "handoff-brief",
+      "position": {
+        "x": 384,
+        "y": 0
+      },
+      "description": "Close the run with what changed, what was verified, and what is open."
+    }
+  ],
+  "edges": [
+    {
+      "id": "stage-pr-brief",
+      "source": "stage-pr",
+      "target": "brief",
+      "data": {
+        "trigger": "always",
+        "handoff": "full",
+        "tone": "default"
+      }
+    }
+  ],
+  "entryNodeIds": [
+    "stage-pr"
+  ],
+  "exitNodeIds": [
+    "brief"
+  ],
+  "version": "0.1.0",
+  "icon": "layers",
+  "source": "user"
+}

@@ -1,0 +1,72 @@
+{
+  "id": "repo-preflight",
+  "name": "Repository preflight",
+  "color": "coral",
+  "description": "Choose the repository, preserve uncommitted work, branch, and learn the conventions.",
+  "tags": [
+    "bhg",
+    "safety",
+    "grounding",
+    "needs-review"
+  ],
+  "nodes": [
+    {
+      "id": "target",
+      "componentId": "repo-target",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "description": "Decide which repository and base branch the change belongs to."
+    },
+    {
+      "id": "safety",
+      "componentId": "workspace-safety",
+      "position": {
+        "x": 384,
+        "y": 0
+      },
+      "description": "Preserve anything uncommitted, then open the working branch."
+    },
+    {
+      "id": "orient",
+      "componentId": "repo-orientation",
+      "position": {
+        "x": 768,
+        "y": 0
+      },
+      "description": "Read the conventions and bound the change to a named surface."
+    }
+  ],
+  "edges": [
+    {
+      "id": "target-safety",
+      "source": "target",
+      "target": "safety",
+      "data": {
+        "trigger": "always",
+        "handoff": "summary",
+        "tone": "default"
+      }
+    },
+    {
+      "id": "safety-orient",
+      "source": "safety",
+      "target": "orient",
+      "data": {
+        "trigger": "always",
+        "handoff": "full",
+        "tone": "default"
+      }
+    }
+  ],
+  "entryNodeIds": [
+    "target"
+  ],
+  "exitNodeIds": [
+    "orient"
+  ],
+  "version": "0.1.0",
+  "icon": "layers",
+  "source": "user"
+}

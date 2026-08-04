@@ -1,11 +1,15 @@
 import type { ComponentTemplate, ProjectContext, RelayAssignmentBundle, WorkflowDocument, WorkflowModuleDefinition } from '../types/workflow'
+import type { CatalystDefinition, WorkflowTemplate } from '../types/catalog'
 import { isRecord, isStringArray } from './storage'
 
 const componentKinds = new Set(['agent', 'judge', 'router', 'human', 'tool', 'module', 'workflow', 'catalyst'])
-const templateKinds = new Set(['agent', 'judge', 'router', 'human', 'tool', 'module', 'workflow'])
+/** Kinds an author may declare. `catalyst` is a platform component and cannot be authored. */
+export const templateKinds = new Set(['agent', 'judge', 'router', 'human', 'tool', 'module', 'workflow'])
 const nodeStatuses = new Set(['idle', 'queued', 'running', 'passed', 'failed'])
 const reasoningEfforts = new Set(['low', 'medium', 'high', 'xhigh'])
 const relayTools = new Set(['filesystem', 'terminal', 'git', 'browser', 'web'])
+const catalystKinds = new Set(['signed-webhook', 'connector-event', 'cron', 'secure-query'])
+const catalystSecurity = new Set(['hmac', 'connector-oauth', 'runner-token'])
 
 const isFinitePosition = (value: unknown) => isRecord(value)
   && typeof value.x === 'number'
@@ -55,8 +59,8 @@ export function isComponentTemplate(value: unknown): value is ComponentTemplate 
     && typeof value.color === 'string'
     && typeof value.version === 'string'
     && isStringArray(value.tags)
-    && isStringArray(value.inputs)
-    && isStringArray(value.outputs)
+    && (value.inputs === undefined || isStringArray(value.inputs))
+    && (value.outputs === undefined || isStringArray(value.outputs))
     && typeof value.instruction === 'string'
     && (value.defaults === undefined || (isRecord(value.defaults) && Object.values(value.defaults).every((item) => typeof item === 'string')))
     && (value.workflowId === undefined || typeof value.workflowId === 'string')
@@ -72,8 +76,8 @@ export function isWorkflowModuleDefinition(value: unknown): value is WorkflowMod
     || typeof value.icon !== 'string'
     || typeof value.color !== 'string'
     || !isStringArray(value.tags)
-    || !isStringArray(value.inputs)
-    || !isStringArray(value.outputs)
+    || (value.inputs !== undefined && !isStringArray(value.inputs))
+    || (value.outputs !== undefined && !isStringArray(value.outputs))
     || !['built-in', 'user'].includes(String(value.source))
     || !Array.isArray(value.nodes)
     || !Array.isArray(value.edges)
@@ -126,7 +130,6 @@ export function isWorkflowDocument(value: unknown): value is WorkflowDocument {
     || value.specification.artifact !== 'run-spec.json')) return false
 
   const nodeIds = new Set<string>()
-  const projectTools: Set<string> | null = value.project.defaults ? new Set(value.project.defaults.tools) : null
   for (const node of value.nodes) {
     if (!isRecord(node)
       || typeof node.id !== 'string'
@@ -150,7 +153,10 @@ export function isWorkflowDocument(value: unknown): value is WorkflowDocument {
     if (node.data.execution !== undefined && (!isRecord(node.data.execution)
       || (node.data.execution.model !== undefined && typeof node.data.execution.model !== 'string')
       || (node.data.execution.effort !== undefined && (typeof node.data.execution.effort !== 'string' || !reasoningEfforts.has(node.data.execution.effort)))
-      || (node.data.execution.tools !== undefined && (!Array.isArray(node.data.execution.tools) || !node.data.execution.tools.every((tool) => typeof tool === 'string' && relayTools.has(tool) && (!projectTools || projectTools.has(tool))))))) return false
+      // Why: a node's tool list is NOT cross-checked against the project allowlist. Narrowing the
+      // project defaults later would otherwise make every saved graph fail to parse and vanish on
+      // load. The allowlist is enforced where it matters — at dispatch, by the driver.
+      || (node.data.execution.tools !== undefined && (!Array.isArray(node.data.execution.tools) || !node.data.execution.tools.every((tool) => typeof tool === 'string' && relayTools.has(tool)))))) return false
     if (node.data.catalyst !== undefined && (!isRecord(node.data.catalyst)
       || (node.data.catalyst.definitionId !== undefined && typeof node.data.catalyst.definitionId !== 'string'))) return false
     if (node.data.module !== undefined && (!isRecord(node.data.module)
@@ -173,11 +179,9 @@ export function isWorkflowDocument(value: unknown): value is WorkflowDocument {
       || !nodeIds.has(edge.target)
       || (edge.type !== undefined && edge.type !== 'workflow')
       || (edge.data !== undefined && !isRecord(edge.data))) return false
-    if (isRecord(edge.data) && edge.data.handoff !== undefined && (!isRecord(edge.data.handoff)
-      || !['concise', 'structured', 'custom'].includes(String(edge.data.handoff.mode))
-      || typeof edge.data.handoff.required !== 'boolean'
-      || !isStringArray(edge.data.handoff.include)
-      || !['block', 'auto-summary'].includes(String(edge.data.handoff.onMissing)))) return false
+    if (isRecord(edge.data) && edge.data.handoff !== undefined
+      && !isRecord(edge.data.handoff)
+      && !['signal', 'summary', 'full'].includes(String(edge.data.handoff))) return false
     edgeIds.add(edge.id)
   }
 
@@ -191,6 +195,47 @@ export function isWorkflowDocument(value: unknown): value is WorkflowDocument {
   } else if (value.entry?.mode === 'catalyst') return false
 
   return true
+}
+
+/**
+ * A catalyst definition, matching `docs/catalyst.schema.json`.
+ *
+ * `workflowId` is optional: a catalyst is configured on its own and attached to a workflow later from
+ * a Catalyst node on the canvas.
+ */
+export function isCatalystDefinition(value: unknown): value is CatalystDefinition {
+  return isRecord(value)
+    && typeof value.id === 'string'
+    && Boolean(value.id)
+    && typeof value.name === 'string'
+    && Boolean(value.name)
+    && catalystKinds.has(String(value.kind))
+    && (value.workflowId === undefined || typeof value.workflowId === 'string')
+    && (value.workflowName === undefined || typeof value.workflowName === 'string')
+    && typeof value.selector === 'string'
+    && (value.settings === undefined || (isRecord(value.settings) && Object.values(value.settings).every((item) => typeof item === 'string')))
+    && catalystSecurity.has(String(value.security))
+    && ['awaiting-runner', 'paused'].includes(String(value.status))
+    && typeof value.createdAt === 'string'
+}
+
+export function isWorkflowTemplate(value: unknown): value is WorkflowTemplate {
+  if (!isRecord(value)
+    || typeof value.id !== 'string'
+    || typeof value.name !== 'string'
+    || typeof value.description !== 'string'
+    || !['Guided', 'Advanced'].includes(String(value.level))
+    || !isStringArray(value.steps)
+    || !isStringArray(value.componentIds)
+    || (value.moduleIds !== undefined && !isStringArray(value.moduleIds))
+    || (value.adaptationRules !== undefined && !Array.isArray(value.adaptationRules))
+    || !['built-in', 'user', 'community'].includes(String(value.source))
+    || typeof value.published !== 'boolean') return false
+  if (value.assets === undefined) return true
+  return isRecord(value.assets)
+    && (value.assets.components === undefined || (Array.isArray(value.assets.components) && value.assets.components.every(isComponentTemplate)))
+    && (value.assets.modules === undefined || (Array.isArray(value.assets.modules) && value.assets.modules.every(isWorkflowModuleDefinition)))
+    && (value.assets.workflow === undefined || isWorkflowDocument(value.assets.workflow))
 }
 
 export interface ParsedWorkflowImport {

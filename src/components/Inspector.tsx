@@ -31,6 +31,7 @@ interface InspectorProps {
   onOpenProjectConfig: () => void
   onOpenCatalysts: () => void
   onToggleCatalyst: (id: string) => void
+  onBindCatalyst: (id: string) => void
   modules: WorkflowModuleDefinition[]
   onExpandModule: (nodeId: string) => void
 }
@@ -50,7 +51,7 @@ const toolOptions: { id: RelayTool; label: string }[] = [
   { id: 'web', label: 'Web' },
 ]
 
-export function Inspector({ node, project, sourceInstruction, catalysts, workflowId, onClose, onUpdateNode, onOpenProjectConfig, onOpenCatalysts, onToggleCatalyst, modules, onExpandModule }: InspectorProps) {
+export function Inspector({ node, project, sourceInstruction, catalysts, workflowId, onClose, onUpdateNode, onOpenProjectConfig, onOpenCatalysts, onToggleCatalyst, onBindCatalyst, modules, onExpandModule }: InspectorProps) {
   const [tab, setTab] = useState<'setup' | 'prompt' | 'source'>('setup')
   if (!node) return null
 
@@ -87,7 +88,8 @@ export function Inspector({ node, project, sourceInstruction, catalysts, workflo
   const updateOverride = (key: string, value: string) => onUpdateNode(node.id, { overrides: { ...node.data.overrides, [key]: value } })
 
   if (isCatalyst) {
-    const availableCatalysts = catalysts.filter((catalyst) => catalyst.workflowId === workflowId)
+    // Unbound catalysts are configured independently; attaching one here is what binds it.
+    const availableCatalysts = catalysts.filter((catalyst) => !catalyst.workflowId || catalyst.workflowId === workflowId)
     const selectedCatalyst = availableCatalysts.find((catalyst) => catalyst.id === node.data.catalyst?.definitionId) ?? availableCatalysts[0]
     return <aside className="inspector-panel component-inspector platform-entry-inspector">
       <div className="inspector-heading component-inspector-heading">
@@ -106,7 +108,7 @@ export function Inspector({ node, project, sourceInstruction, catalysts, workflo
         <section className="inspector-section-card catalyst-binding-card">
           <div className="inspector-section-heading"><span><Zap size={14} /></span><div><h3>Connected catalyst</h3><p>Select a platform trigger created for this workflow.</p></div></div>
           {availableCatalysts.length ? <>
-            <label><span>Catalyst</span><select value={selectedCatalyst?.id ?? ''} onChange={(event) => onUpdateNode(node.id, { catalyst: { definitionId: event.target.value } })}>{availableCatalysts.map((catalyst) => <option key={catalyst.id} value={catalyst.id}>{catalyst.name}</option>)}</select></label>
+            <label><span>Catalyst</span><select value={selectedCatalyst?.id ?? ''} onChange={(event) => { onUpdateNode(node.id, { catalyst: { definitionId: event.target.value } }); onBindCatalyst(event.target.value) }}>{availableCatalysts.map((catalyst) => <option key={catalyst.id} value={catalyst.id}>{catalyst.name}{catalyst.workflowId ? '' : ' · unbound'}</option>)}</select></label>
             {selectedCatalyst && <div className="bound-catalyst-summary"><span><strong>{selectedCatalyst.kind.replaceAll('-', ' ')}</strong><small>{describeCatalyst(selectedCatalyst)}</small></span><label className="switch-control"><input type="checkbox" checked={selectedCatalyst.status !== 'paused'} onChange={() => onToggleCatalyst(selectedCatalyst.id)} /><i /><span>{selectedCatalyst.status === 'paused' ? 'Paused' : 'Enabled'}</span></label></div>}
             <button className="secondary-cta catalyst-manage-button" onClick={onOpenCatalysts}>Manage catalysts <ChevronRight size={13} /></button>
           </> : <div className="catalyst-binding-empty"><p>No Catalyst has been configured for this workflow yet.</p><button className="secondary-cta" onClick={onOpenCatalysts}>Configure catalyst <ChevronRight size={13} /></button></div>}
@@ -123,8 +125,7 @@ export function Inspector({ node, project, sourceInstruction, catalysts, workflo
       <div className="inspector-scroll">
         <section className="module-instance-card"><div><span className="status-chip ready">Linked · v{definition?.version ?? node.data.module?.version}</span><p>{definition?.description ?? node.data.description}</p></div><label><span>Name in this workflow</span><input value={node.data.label} onChange={(event) => onUpdateNode(node.id, { label: event.target.value })} /></label></section>
         {definition && <>
-          <section className="inspector-section-card module-contract-card"><div className="inspector-section-heading"><span><Layers3 size={14} /></span><div><h3>Public contract</h3><p>Only these values cross the module boundary.</p></div></div><div className="module-port-list"><div><span>Inputs</span>{definition.inputs.map((item) => <code key={item}>{item}</code>)}</div><div><span>Outputs</span>{definition.outputs.map((item) => <code key={item}>{item}</code>)}</div></div></section>
-          <section className="inspector-section-card module-contents-card"><div className="inspector-section-heading"><span><Workflow size={14} /></span><div><h3>Inside this module</h3><p>{definition.nodes.length} components · {definition.edges.length} transitions</p></div></div><ol>{definition.nodes.map((item, index) => <li key={item.id}><span>{index + 1}</span><div><strong>{item.id.replaceAll('-', ' ')}</strong><small>{item.componentId}</small></div></li>)}</ol></section>
+          <section className="inspector-section-card module-contents-card"><div className="inspector-section-heading"><span><Workflow size={14} /></span><div><h3>Inside this module</h3><p>{definition.nodes.length} components · {definition.edges.length} transitions</p></div></div><ol>{definition.nodes.map((item, index) => <li key={item.id}><span>{index + 1}</span><div><strong>{item.componentId.replaceAll('-', ' ')}</strong>{item.description && <small>{item.description}</small>}</div></li>)}</ol></section>
           <button className="expand-module-button" onClick={() => onExpandModule(node.id)}><Layers3 size={14} /><span><strong>Expand into editable components</strong><small>Detach a copy inside this workflow. The saved module remains unchanged.</small></span><ChevronRight size={14} /></button>
         </>}
         <section className="project-context-summary"><span className="project-context-icon"><FolderGit2 size={15} /></span><div><span>Project context</span><strong>{project.root ? project.name : 'No project connected'}</strong><small>Resolved by specification preflight at run start.</small></div><button onClick={onOpenProjectConfig}><ChevronRight size={15} /></button></section>
@@ -190,7 +191,6 @@ export function Inspector({ node, project, sourceInstruction, catalysts, workflo
             <div className="inspector-section-heading"><span><Layers3 size={14} /></span><div><h3>Nested workflow</h3><p>Control the child execution boundary.</p></div></div>
             <div className="nested-workflow-id"><span>Workflow reference</span><code>{node.data.subworkflow.workflowId}</code></div>
             <label><span>Execution boundary</span><select value={node.data.subworkflow.execution} onChange={(event) => updateSubworkflow({ execution: event.target.value as NonNullable<WorkflowNode['data']['subworkflow']>['execution'] })}><option value="isolated">Isolated child run</option><option value="inline">Inline in parent run</option></select></label>
-            <label><span>Context passed</span><select value={node.data.subworkflow.context} onChange={(event) => updateSubworkflow({ context: event.target.value as NonNullable<WorkflowNode['data']['subworkflow']>['context'] })}><option value="inherit">Inherit parent context</option><option value="mapped">Mapped inputs only</option><option value="none">Objective only</option></select></label>
             <label><span>If child workflow fails</span><select value={node.data.subworkflow.onFailure} onChange={(event) => updateSubworkflow({ onFailure: event.target.value as NonNullable<WorkflowNode['data']['subworkflow']>['onFailure'] })}><option value="bubble">Fail parent step</option><option value="pause">Pause for decision</option><option value="continue">Continue with failure artifact</option></select></label>
           </section>}
 

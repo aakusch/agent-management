@@ -1,42 +1,14 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react'
-import {
-  Accessibility,
-  Bot,
-  Bug,
-  Check,
-  CircleUserRound,
-  Eye,
-  FileCheck2,
-  GitFork,
-  LoaderCircle,
-  ScanSearch,
-  ShieldCheck,
-  TerminalSquare,
-  WandSparkles,
-  Workflow,
-  Zap,
-  X,
-} from 'lucide-react'
+import { Check, LoaderCircle, X } from 'lucide-react'
+import { iconFor } from '../lib/componentIcons'
 import type { WorkflowNode as WorkflowNodeType } from '../types/workflow'
 
-const icons = {
-  wand: WandSparkles,
-  bot: Bot,
-  shield: ShieldCheck,
-  accessibility: Accessibility,
-  bug: Bug,
-  workflow: Workflow,
-  scan: ScanSearch,
-  eye: Eye,
-  terminal: TerminalSquare,
-  split: GitFork,
-  'user-check': CircleUserRound,
-  'file-check': FileCheck2,
-  zap: Zap,
-} as const
+const kindLabel: Record<string, string> = {
+  agent: 'Agent', judge: 'Judge', tool: 'Tool', router: 'Logic', human: 'Approval', module: 'Module', workflow: 'Workflow', catalyst: 'Catalyst',
+}
 
 export function WorkflowNode({ data, selected }: NodeProps<WorkflowNodeType>) {
-  const Icon = icons[data.icon as keyof typeof icons] ?? Bot
+  const Icon = iconFor(data.icon)
   const statusIcon = data.status === 'running'
     ? <LoaderCircle className="spin" size={18} />
     : data.status === 'passed'
@@ -44,9 +16,6 @@ export function WorkflowNode({ data, selected }: NodeProps<WorkflowNodeType>) {
       : data.status === 'failed'
         ? <X size={18} />
         : null
-  const kindLabel: Record<string, string> = {
-    agent: 'Agent', judge: 'Judge', tool: 'Tool', router: 'Logic', human: 'Approval', module: 'Module', workflow: 'Workflow', catalyst: 'Catalyst',
-  }
 
   return (
     <div
@@ -64,6 +33,7 @@ export function WorkflowNode({ data, selected }: NodeProps<WorkflowNodeType>) {
       </div>
       <p className="node-description">{data.result || data.description}</p>
       {data.kind === 'module' && <div className="module-node-composition" aria-label="Reusable component composition"><i /><span /><i /><span /><i /><em>linked graph</em></div>}
+      {data.kind === 'workflow' && <div className="workflow-node-nesting" aria-label="Nested saved workflow"><i /><span /><i /><span /><i /><em>nested flow</em></div>}
       <div className="node-meta">
         <span className="node-kind-badge">{kindLabel[data.kind] ?? data.kind}</span>
         {data.tokens && <><i /> <span>{data.tokens}</span></>}

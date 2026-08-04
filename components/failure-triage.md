@@ -1,16 +1,19 @@
 ---
 id: failure-triage
-name: Triage failed check
-description: Classify a failed verification result and choose the smallest valid repair route.
-kind: router
-icon: split
-color: coral
-version: 1.0.0
-tags: failure, routing, repair
-inputs: failure_evidence, patch, task_spec
-outputs: route, repair_scope, failure_classification
+name: Failure triage
+description: Name the single smallest cause of a failure and the minimal fix.
+kind: judge
+icon: bug
+color: rose
+version: 0.1.0
+tags: bhg, verification, triage, needs-review
 ---
 
-Classify the failure as implementation defect, test defect, environment issue, pre-existing failure, flaky evidence, or missing capability. Choose exactly one route and define a bounded repair scope.
+Read the failing output and diagnose it.
 
-Do not route environment or pre-existing failures into unrelated code changes. If evidence is insufficient, pause for a targeted diagnostic rather than guessing.
+Return: the one most likely cause, the file and line that proves it, and the smallest change that
+would make the check pass. Distinguish a defect in the new change from a pre-existing failure and
+from an environment problem.
+
+If you have already been wrong about this failure twice, stop guessing — say what you ruled out and
+escalate for live inspection. Propose no unrelated cleanups.

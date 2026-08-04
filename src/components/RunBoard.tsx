@@ -36,7 +36,8 @@ interface RunBoardProps {
   stagedRuns: PendingRun[]
   catalysts: CatalystDefinition[]
   onUpdateStagedRuns: (runs: PendingRun[]) => void
-  onChange: (board: RunMonitorBoard) => void
+  /** Accepts an updater so bursts of runner events cannot overwrite each other's tile patches. */
+  onChange: (update: (board: RunMonitorBoard) => RunMonitorBoard) => void
   onOpenBuilder: () => void
   onOpenCatalysts: () => void
 }
@@ -49,12 +50,20 @@ const statusCopy: Record<RunMonitorStatus, { label: string; detail: string }> = 
   completed: { label: 'Completed', detail: 'The workflow reached a terminal state.' },
 }
 
+/**
+ * Every `relay-events-v1` type, subscribed by name.
+ *
+ * A runner may send events as unnamed `message` frames or as named SSE events; both reach the same
+ * handler. Keep this in step with the type list in `docs/DRIVER-PROTOCOL.md` — a name missing here is
+ * a named event the board silently never sees.
+ */
 const eventTypes = [
   'run.created', 'run.started', 'run.paused', 'run.resumed', 'run.completed', 'run.failed', 'run.cancelled',
   'node.ready', 'node.started', 'node.output', 'node.completed', 'node.failed',
   'agent.spawned', 'agent.heartbeat', 'agent.tool.started', 'agent.tool.completed', 'agent.stopped',
   'route.selected', 'loop.iterated', 'loop.exhausted', 'artifact.created', 'approval.requested',
   'approval.resolved', 'budget.warning', 'policy.denied',
+  'resource.locked', 'resource.waiting', 'resource.released', 'resource.conflict',
   'specification.started', 'specification.completed', 'specification.failed',
 ]
 
@@ -211,15 +220,34 @@ function ExpandedRun({ tile, onBack, onPatch }: { tile: RunMonitorTile; onBack: 
     if (events.length) eventEnd.current?.scrollIntoView({ block: 'nearest' })
   }, [events])
 
+  /**
+   * Resolves the pasted observer value into the two things the protocol needs: the events URL and the
+   * origin plus run id the control verbs hang off.
+   *
+   * Why the run id comes from the URL when it is there: the runner owns run ids, and an operator
+   * pasting a signed `/v1/runs/<id>/events` link for a run staged under a different id would
+   * otherwise send pause and cancel to a run that does not exist.
+   */
+  const resolveObserver = (value: string) => {
+    const trimmed = value.trim().replace(/\/+$/, '')
+    if (!trimmed) return null
+    const url = new URL(trimmed.includes('/v1/runs/') ? trimmed : `${trimmed}/v1/runs/${encodeURIComponent(tile.id)}/events`)
+    const match = url.pathname.match(/^(.*)\/v1\/runs\/([^/]+)(?:\/.*)?$/)
+    if (!match) throw new Error('not an observer URL')
+    const runId = decodeURIComponent(match[2])
+    const controlBase = `${url.origin}${match[1]}`
+    if (!url.pathname.endsWith('/events')) url.pathname = `${match[1]}/v1/runs/${match[2]}/events`
+    return { events: url, controlBase, runId }
+  }
+
   const connect = () => {
-    const base = observerUrl.trim().replace(/\/$/, '')
-    if (!base) return
+    if (!observerUrl.trim()) return
     try {
-      const endpoint = base.includes('/events') ? base : `${base}/v1/runs/${encodeURIComponent(tile.id)}/events`
-      const url = new URL(endpoint)
-      if (token.trim()) url.searchParams.set('token', token.trim())
-      onPatch({ observerUrl: base, status: tile.status === 'not-started' ? 'waiting-runner' : tile.status })
-      setStreamUrl(url.toString())
+      const resolved = resolveObserver(observerUrl)
+      if (!resolved) return
+      if (token.trim()) resolved.events.searchParams.set('token', token.trim())
+      onPatch({ observerUrl: observerUrl.trim().replace(/\/+$/, ''), status: tile.status === 'not-started' ? 'waiting-runner' : tile.status })
+      setStreamUrl(resolved.events.toString())
     } catch { setConnection('error') }
   }
 
@@ -244,17 +272,14 @@ function ExpandedRun({ tile, onBack, onPatch }: { tile: RunMonitorTile; onBack: 
   }
 
   const sendControl = async (control: 'pause' | 'resume' | 'cancel') => {
-    const observer = observerUrl.trim().replace(/\/$/, '')
-    if (!observer) return
     try {
-      const parsed = new URL(observer)
-      const runPath = parsed.pathname.indexOf('/v1/runs/')
-      const base = runPath >= 0 ? `${parsed.origin}${parsed.pathname.slice(0, runPath)}` : observer
-      const response = await fetch(`${base}/v1/runs/${encodeURIComponent(tile.id)}/${control}`, {
+      const resolved = resolveObserver(observerUrl)
+      if (!resolved) return
+      const response = await fetch(`${resolved.controlBase}/v1/runs/${encodeURIComponent(resolved.runId)}/${control}`, {
         method: 'POST',
         headers: token.trim() ? { Authorization: `Bearer ${token.trim()}` } : {},
       })
-      if (!response.ok) throw new Error()
+      if (!response.ok) throw new Error(`${control} was refused`)
     } catch { setConnection('error') }
   }
 
@@ -360,8 +385,8 @@ export function RunBoard({ board, workflows, stagedRuns, catalysts, onUpdateStag
   const selectedTile = runningTiles.find((tile) => tile.id === selectedRunId)
 
   const patchTile = useCallback((id: string, patch: Partial<RunMonitorTile>) => {
-    onChange({ ...board, tiles: board.tiles.map((tile) => tile.id === id ? { ...tile, ...patch } : tile) })
-  }, [board, onChange])
+    onChange((current) => ({ ...current, tiles: current.tiles.map((tile) => tile.id === id ? { ...tile, ...patch } : tile) }))
+  }, [onChange])
 
   const startStaged = (run: PendingRun) => {
     const workflow = workflows.find((item) => item.id === run.workflowId || item.name === run.workflowName)
@@ -380,7 +405,7 @@ export function RunBoard({ board, workflows, stagedRuns, catalysts, onUpdateStag
       updatedAt: new Date().toISOString(),
       graph: run.graph,
     }
-    onChange({ ...board, tiles: [tile, ...board.tiles.filter((item) => item.id !== run.id && item.status !== 'not-started')] })
+    onChange((current) => ({ ...current, tiles: [tile, ...current.tiles.filter((item) => item.id !== run.id && item.status !== 'not-started')] }))
     onUpdateStagedRuns(stagedRuns.filter((item) => item.id !== run.id))
     setSection('running')
     setSelectedRunId(run.id)

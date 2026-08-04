@@ -1,16 +1,17 @@
 ---
 id: project-checks
 name: Project checks
-description: Detect and run the repository's build, typecheck, lint, and test commands.
+description: Run typecheck, lint, and build separately and report each result.
 kind: tool
 icon: terminal
 color: amber
-version: 1.0.0
-tags: build, test, typecheck, lint
-inputs: patch, project_context
-outputs: verdict, check_report
+version: 0.1.0
+tags: bhg, verification, needs-review
 ---
 
-Read the project manifest and instructions to determine the required verification commands. Prefer the repository's package manager and existing scripts.
+Run the project's own static checks, each as its own step: typecheck, lint, build.
 
-Run applicable build, typecheck, lint, and test commands. Do not invent scripts or silently skip failures. Return every command, exit code, duration, and the smallest useful failure excerpt.
+Use the commands identified during orientation. Do not substitute a global tool for a project script.
+
+Report per check: the exact command, pass or fail, and for failures every diagnostic with file and
+line. Do not summarize failures away, and do not attempt fixes here.

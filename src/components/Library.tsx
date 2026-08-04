@@ -1,51 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import {
-  Accessibility,
-  Bot,
-  Bug,
-  ChevronDown,
-  CircleUserRound,
-  Eye,
-  FileCheck2,
-  GitFork,
-  Layers3,
-  PanelLeftClose,
-  Plus,
-  ScanSearch,
-  Search,
-  ShieldCheck,
-  TerminalSquare,
-  Zap,
-  WandSparkles,
-  Workflow,
-} from 'lucide-react'
+import { ChevronDown, PanelLeftClose, Plus, Search } from 'lucide-react'
+import { iconFor } from '../lib/componentIcons'
 import type { ComponentTemplate } from '../types/workflow'
-
-const icons = {
-  wand: WandSparkles,
-  bot: Bot,
-  shield: ShieldCheck,
-  accessibility: Accessibility,
-  bug: Bug,
-  scan: ScanSearch,
-  eye: Eye,
-  terminal: TerminalSquare,
-  split: GitFork,
-  'user-check': CircleUserRound,
-  'file-check': FileCheck2,
-  workflow: Workflow,
-  module: Layers3,
-  zap: Zap,
-} as const
 
 interface LibraryProps {
   components: ComponentTemplate[]
   onAdd: (template: ComponentTemplate) => void
   onCollapse: () => void
   onNewComponent: () => void
+  onNewModule?: () => void
+  /** 'module' authoring cannot nest modules or workflows, so those shelves are dropped entirely. */
+  variant?: 'workflow' | 'module'
 }
 
-export function Library({ components, onAdd, onCollapse, onNewComponent }: LibraryProps) {
+export function Library({ components, onAdd, onCollapse, onNewComponent, onNewModule, variant = 'workflow' }: LibraryProps) {
   const [query, setQuery] = useState('')
   const searchRef = useRef<HTMLInputElement>(null)
   const [open, setOpen] = useState<Record<string, boolean>>({
@@ -65,13 +33,23 @@ export function Library({ components, onAdd, onCollapse, onNewComponent }: Libra
     )
   }, [components, query])
 
-  const sections = [
+  // Why: Modules and Workflows stay listed even when empty — they are how a workspace grows, and a
+  // missing section reads as a missing feature rather than an empty shelf.
+  const composition = variant === 'workflow'
+    ? [
+      { label: 'Modules', items: filtered.filter((item) => item.kind === 'module'), empty: 'No modules yet. Compose components into one reusable step.', action: onNewModule && { label: 'New module', run: onNewModule } },
+    ]
+    : []
+  const nested = variant === 'workflow'
+    ? [{ label: 'Workflows', items: filtered.filter((item) => item.kind === 'workflow'), empty: 'No saved workflows yet. Save one to nest it inside another.' }]
+    : []
+  const sections: Array<{ label: string; items: ComponentTemplate[]; empty?: string; action?: { label: string; run: () => void } | undefined }> = [
     { label: 'Entrypoints', items: filtered.filter((item) => item.kind === 'catalyst') },
-    { label: 'Modules', items: filtered.filter((item) => item.kind === 'module') },
+    ...composition,
     { label: 'Agents', items: filtered.filter((item) => ['agent', 'judge'].includes(item.kind)) },
     { label: 'Logic', items: filtered.filter((item) => item.kind === 'router') },
     { label: 'Tools & people', items: filtered.filter((item) => ['tool', 'human'].includes(item.kind)) },
-    { label: 'Workflows', items: filtered.filter((item) => item.kind === 'workflow') },
+    ...nested,
   ]
 
   useEffect(() => {
@@ -104,7 +82,7 @@ export function Library({ components, onAdd, onCollapse, onNewComponent }: Libra
       </label>
 
       <div className="library-scroll">
-        {sections.map((section) => (
+        {sections.filter((section) => section.items.length || (!query.trim() && section.empty)).map((section) => (
           <section className="library-section" key={section.label}>
             <button
               className="section-heading"
@@ -116,11 +94,12 @@ export function Library({ components, onAdd, onCollapse, onNewComponent }: Libra
               <ChevronDown className={open[section.label] ? '' : 'collapsed'} size={15} />
             </button>
             {open[section.label] && <div id={`library-section-${section.label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}>
+              {!section.items.length && section.empty && <div className="library-section-empty"><span>{section.empty}</span>{section.action && <button onClick={section.action.run}><Plus size={12} /> {section.action.label}</button>}</div>}
               {section.items.map((component) => {
-              const Icon = icons[component.icon as keyof typeof icons] ?? Bot
+              const Icon = iconFor(component.icon)
               return (
                 <button
-                  className="library-item"
+                  className={`library-item kind-${component.kind}`}
                   key={component.id}
                   draggable
                   onDragStart={(event) => {
@@ -142,7 +121,7 @@ export function Library({ components, onAdd, onCollapse, onNewComponent }: Libra
             </div>}
           </section>
         ))}
-        {filtered.length === 0 && <div className="empty-search">No components found.</div>}
+        {query.trim() && filtered.length === 0 && <div className="empty-search">No components found.</div>}
       </div>
 
       <button className="new-component-button" onClick={onNewComponent}>

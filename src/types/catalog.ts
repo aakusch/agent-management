@@ -1,5 +1,5 @@
 import type { RunConfiguration } from '../components/StartRunModal'
-import type { ProjectCapability, WorkflowAdaptation } from './workflow'
+import type { ComponentTemplate, ProjectCapability, WorkflowAdaptation, WorkflowDocument, WorkflowModuleDefinition } from './workflow'
 
 export interface RunGraphSnapshot {
   nodes: Array<{ id: string; label: string; kind: string; x: number; y: number }>
@@ -41,6 +41,15 @@ export interface WorkflowTemplate {
   author?: string
   published: boolean
   createdAt?: string
+  /**
+   * Cloned into the workspace when the template is used, so it works on an empty install. The
+   * workflow document carries the whole graph — transitions, gates, loops — not just an ordering.
+   */
+  assets?: {
+    components?: ComponentTemplate[]
+    modules?: WorkflowModuleDefinition[]
+    workflow?: WorkflowDocument
+  }
 }
 
 export interface PendingRun {
@@ -119,8 +128,9 @@ export interface CatalystDefinition {
   id: string
   name: string
   kind: CatalystKind
-  workflowId: string
-  workflowName: string
+  /** Optional: a catalyst is configured on its own and attached to a workflow later. */
+  workflowId?: string
+  workflowName?: string
   selector: string
   settings?: Record<string, string>
   security: 'hmac' | 'connector-oauth' | 'runner-token'

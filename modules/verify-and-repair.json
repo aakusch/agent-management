@@ -1,0 +1,115 @@
+{
+  "id": "verify-and-repair",
+  "name": "Verify and repair",
+  "color": "amber",
+  "description": "Run every check independently and route each failure to one minimal, bounded repair.",
+  "tags": [
+    "bhg",
+    "verification",
+    "needs-review"
+  ],
+  "nodes": [
+    {
+      "id": "checks",
+      "componentId": "project-checks",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "description": "Typecheck, lint, and build as separate steps."
+    },
+    {
+      "id": "tests",
+      "componentId": "test-suite",
+      "position": {
+        "x": 0,
+        "y": 192
+      },
+      "description": "Covering tests first, then the full suite."
+    },
+    {
+      "id": "triage",
+      "componentId": "failure-triage",
+      "position": {
+        "x": 384,
+        "y": 0
+      },
+      "description": "Name the one smallest cause of whatever failed."
+    },
+    {
+      "id": "repair",
+      "componentId": "targeted-repair",
+      "position": {
+        "x": 768,
+        "y": 0
+      },
+      "description": "Apply only the diagnosed fix."
+    }
+  ],
+  "edges": [
+    {
+      "id": "checks-triage",
+      "source": "checks",
+      "target": "triage",
+      "data": {
+        "trigger": "condition",
+        "handoff": "summary",
+        "tone": "danger",
+        "label": "failed",
+        "condition": "checks == fail"
+      }
+    },
+    {
+      "id": "tests-triage",
+      "source": "tests",
+      "target": "triage",
+      "data": {
+        "trigger": "condition",
+        "handoff": "summary",
+        "tone": "danger",
+        "label": "failed",
+        "condition": "tests == fail"
+      }
+    },
+    {
+      "id": "triage-repair",
+      "source": "triage",
+      "target": "repair",
+      "data": {
+        "trigger": "always",
+        "handoff": "full",
+        "tone": "default"
+      }
+    },
+    {
+      "id": "repair-checks",
+      "source": "repair",
+      "target": "checks",
+      "data": {
+        "trigger": "always",
+        "handoff": "summary",
+        "tone": "warning",
+        "label": "re-verify",
+        "loop": {
+          "mode": "bounded",
+          "maxIterations": 3,
+          "maxDurationMinutes": 30,
+          "stopOnNoProgress": 2,
+          "onExhausted": "human"
+        }
+      }
+    }
+  ],
+  "entryNodeIds": [
+    "checks",
+    "tests"
+  ],
+  "exitNodeIds": [
+    "checks",
+    "tests",
+    "repair"
+  ],
+  "version": "0.1.0",
+  "icon": "layers",
+  "source": "user"
+}

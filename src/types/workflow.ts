@@ -28,8 +28,9 @@ export interface ComponentTemplate {
   color: string
   version: string
   tags: string[]
-  inputs: string[]
-  outputs: string[]
+  /** Optional documentation only — Relay does not ask authors to declare a port contract. */
+  inputs?: string[]
+  outputs?: string[]
   instruction: string
   defaults?: Record<string, string>
   workflowId?: string
@@ -63,8 +64,8 @@ export interface WorkflowModuleDefinition {
   icon: string
   color: string
   tags: string[]
-  inputs: string[]
-  outputs: string[]
+  inputs?: string[]
+  outputs?: string[]
   source: 'built-in' | 'user'
   nodes: WorkflowModuleNodeSpec[]
   edges: Array<{
@@ -125,7 +126,6 @@ export interface WorkflowNodeData extends Record<string, unknown> {
   subworkflow?: {
     workflowId: string
     execution: 'inline' | 'isolated'
-    context: 'inherit' | 'mapped' | 'none'
     onFailure: 'bubble' | 'pause' | 'continue'
   }
   module?: {
@@ -137,25 +137,15 @@ export interface WorkflowNodeData extends Record<string, unknown> {
 
 export type WorkflowNode = Node<WorkflowNodeData, 'workflow'>
 
+/** What crosses a transition. One choice, not a field-by-field manifest. */
+export type WorkflowHandoff = 'signal' | 'summary' | 'full'
+
 export interface WorkflowEdgeData extends Record<string, unknown> {
   label?: string
   tone?: 'default' | 'success' | 'danger' | 'warning'
-  trigger?: 'always' | 'condition' | 'human' | 'delay'
+  trigger?: 'always' | 'condition' | 'human'
   condition?: string
-  payload?: {
-    mode: 'all' | 'selected' | 'summary' | 'none'
-    include?: string[]
-  }
-  handoff?: {
-    mode: 'concise' | 'structured' | 'custom'
-    required: boolean
-    include: Array<'artifacts' | 'decisions' | 'verification' | 'risks' | 'open_questions' | 'next_action'>
-    instruction?: string
-    onMissing: 'block' | 'auto-summary'
-  }
-  delaySeconds?: number
-  onBlocked?: 'wait' | 'skip' | 'fail'
-  priority?: number
+  handoff?: WorkflowHandoff
   loop?: {
     mode: 'bounded' | 'until-cancelled'
     maxIterations?: number

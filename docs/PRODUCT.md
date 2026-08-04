@@ -80,7 +80,7 @@ The canvas shown in the MVP: component library, graph editing, node inspector, v
 
 ### 2. Run view
 
-The same graph becomes an execution trace. Nodes show queued/running/passed/failed states, attempts, cost, duration, artifacts, and logs. Selecting an edge explains the condition and the payload it carried.
+The same graph becomes an execution trace. Nodes show queued/running/passed/failed states, attempts, cost, duration, artifacts, and logs. Selecting an edge explains its condition and the handoff it carried.
 
 The live view splits into graph state and agent lanes. The graph answers where execution is; the lanes replace a wall of terminal windows with readable status, current tool activity, heartbeat, budget, and output summaries. Raw terminal output remains expandable for technical debugging.
 

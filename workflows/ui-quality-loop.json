@@ -18,7 +18,11 @@
       "model": "auto",
       "effort": "medium",
       "maxParallelAgents": 3,
-      "tools": ["filesystem", "terminal", "git"]
+      "tools": [
+        "filesystem",
+        "terminal",
+        "git"
+      ]
     },
     "permissions": {
       "spawnAgents": true,
@@ -34,41 +38,197 @@
     {
       "id": "implement",
       "type": "workflow",
-      "position": { "x": 40, "y": 245 },
-      "data": { "label": "Implement UI", "description": "Build the requested UI.", "templateId": "implement-ui", "kind": "agent", "icon": "wand", "color": "mint", "status": "idle", "instruction": "Use the component source.", "overrides": {} }
+      "position": {
+        "x": 40,
+        "y": 245
+      },
+      "data": {
+        "label": "Implement UI",
+        "description": "Build the requested UI.",
+        "templateId": "implement-ui",
+        "kind": "agent",
+        "icon": "wand",
+        "color": "mint",
+        "status": "idle",
+        "instruction": "Use the component source.",
+        "overrides": {}
+      }
     },
     {
       "id": "review",
       "type": "workflow",
-      "position": { "x": 445, "y": 72 },
-      "data": { "label": "Code review", "description": "Review correctness and safety.", "templateId": "code-review", "kind": "judge", "icon": "scan", "color": "blue", "status": "idle", "instruction": "Use the component source.", "overrides": {} }
+      "position": {
+        "x": 445,
+        "y": 72
+      },
+      "data": {
+        "label": "Code review",
+        "description": "Review correctness and safety.",
+        "templateId": "code-review",
+        "kind": "judge",
+        "icon": "scan",
+        "color": "blue",
+        "status": "idle",
+        "instruction": "Use the component source.",
+        "overrides": {}
+      }
     },
     {
       "id": "visual",
       "type": "workflow",
-      "position": { "x": 445, "y": 395 },
-      "data": { "label": "Visual judge", "description": "Compare renders to the reference.", "templateId": "visual-judge", "kind": "judge", "icon": "eye", "color": "violet", "status": "idle", "instruction": "Use the component source.", "overrides": {} }
+      "position": {
+        "x": 445,
+        "y": 395
+      },
+      "data": {
+        "label": "Visual judge",
+        "description": "Compare renders to the reference.",
+        "templateId": "visual-judge",
+        "kind": "judge",
+        "icon": "eye",
+        "color": "violet",
+        "status": "idle",
+        "instruction": "Use the component source.",
+        "overrides": {}
+      }
     },
     {
       "id": "gate",
       "type": "workflow",
-      "position": { "x": 840, "y": 235 },
-      "data": { "label": "Quality gate", "description": "Choose pass or revise.", "templateId": "decision-gate", "kind": "router", "icon": "split", "color": "coral", "status": "idle", "instruction": "Use the component source.", "overrides": {} }
+      "position": {
+        "x": 840,
+        "y": 235
+      },
+      "data": {
+        "label": "Quality gate",
+        "description": "Choose pass or revise.",
+        "templateId": "decision-gate",
+        "kind": "router",
+        "icon": "split",
+        "color": "coral",
+        "status": "idle",
+        "instruction": "Use the component source.",
+        "overrides": {}
+      }
     },
     {
       "id": "ship",
       "type": "workflow",
-      "position": { "x": 1225, "y": 235 },
-      "data": { "label": "Ship summary", "description": "Prepare a handoff.", "templateId": "summarize", "kind": "agent", "icon": "file-check", "color": "cyan", "status": "idle", "instruction": "Use the component source.", "overrides": {} }
+      "position": {
+        "x": 1225,
+        "y": 235
+      },
+      "data": {
+        "label": "Ship summary",
+        "description": "Prepare a handoff.",
+        "templateId": "summarize",
+        "kind": "agent",
+        "icon": "file-check",
+        "color": "cyan",
+        "status": "idle",
+        "instruction": "Use the component source.",
+        "overrides": {}
+      }
     }
   ],
   "edges": [
-    { "id": "implement-review", "source": "implement", "target": "review", "type": "workflow", "data": { "tone": "success", "trigger": "always", "payload": { "mode": "all" }, "onBlocked": "wait" } },
-    { "id": "implement-visual", "source": "implement", "target": "visual", "type": "workflow", "data": { "tone": "default", "trigger": "always", "payload": { "mode": "all" }, "onBlocked": "wait" } },
-    { "id": "review-gate", "source": "review", "target": "gate", "type": "workflow", "data": { "tone": "success", "trigger": "always", "payload": { "mode": "all" }, "onBlocked": "wait" } },
-    { "id": "visual-gate", "source": "visual", "target": "gate", "type": "workflow", "data": { "tone": "default", "trigger": "always", "payload": { "mode": "all" }, "onBlocked": "wait" } },
-    { "id": "gate-ship", "source": "gate", "target": "ship", "type": "workflow", "data": { "label": "pass", "trigger": "condition", "condition": "route == ship", "tone": "success", "payload": { "mode": "summary" }, "onBlocked": "wait" } },
-    { "id": "gate-loop", "source": "gate", "target": "implement", "sourceHandle": "source-bottom", "targetHandle": "target-bottom", "type": "workflow", "data": { "label": "revise", "trigger": "condition", "condition": "route == revise", "tone": "danger", "payload": { "mode": "all" }, "onBlocked": "wait", "loop": { "mode": "bounded", "maxIterations": 3, "maxDurationMinutes": 30, "stopOnNoProgress": 2, "onExhausted": "human" } } }
+    {
+      "id": "implement-review",
+      "source": "implement",
+      "target": "review",
+      "type": "workflow",
+      "data": {
+        "tone": "success",
+        "trigger": "always",
+        "payload": {
+          "mode": "all"
+        },
+        "onBlocked": "wait"
+      }
+    },
+    {
+      "id": "implement-visual",
+      "source": "implement",
+      "target": "visual",
+      "type": "workflow",
+      "data": {
+        "tone": "default",
+        "trigger": "always",
+        "payload": {
+          "mode": "all"
+        },
+        "onBlocked": "wait"
+      }
+    },
+    {
+      "id": "review-gate",
+      "source": "review",
+      "target": "gate",
+      "type": "workflow",
+      "data": {
+        "tone": "success",
+        "trigger": "always",
+        "payload": {
+          "mode": "all"
+        },
+        "onBlocked": "wait"
+      }
+    },
+    {
+      "id": "visual-gate",
+      "source": "visual",
+      "target": "gate",
+      "type": "workflow",
+      "data": {
+        "tone": "default",
+        "trigger": "always",
+        "payload": {
+          "mode": "all"
+        },
+        "onBlocked": "wait"
+      }
+    },
+    {
+      "id": "gate-ship",
+      "source": "gate",
+      "target": "ship",
+      "type": "workflow",
+      "data": {
+        "label": "pass",
+        "trigger": "condition",
+        "condition": "route == ship",
+        "tone": "success",
+        "payload": {
+          "mode": "summary"
+        },
+        "onBlocked": "wait"
+      }
+    },
+    {
+      "id": "gate-loop",
+      "source": "gate",
+      "target": "implement",
+      "sourceHandle": "source-bottom",
+      "targetHandle": "target-bottom",
+      "type": "workflow",
+      "data": {
+        "label": "revise",
+        "trigger": "condition",
+        "condition": "route == revise",
+        "tone": "danger",
+        "payload": {
+          "mode": "all"
+        },
+        "onBlocked": "wait",
+        "loop": {
+          "mode": "bounded",
+          "maxIterations": 3,
+          "maxDurationMinutes": 30,
+          "stopOnNoProgress": 2,
+          "onExhausted": "human"
+        }
+      }
+    }
   ],
   "updatedAt": "2026-08-03T00:00:00.000Z"
 }
