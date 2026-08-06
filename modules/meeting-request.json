@@ -30,7 +30,7 @@
     },
     {
       "id": "clarify",
-      "componentId": "ask-aaron",
+      "componentId": "ask-user",
       "position": {
         "x": 768,
         "y": 0

@@ -224,9 +224,9 @@
         "y": 432
       },
       "data": {
-        "label": "Ask Aaron",
+        "label": "Ask user",
         "description": "Bounded loop exhausted, or the call is Aaron\u2019s to make.",
-        "templateId": "ask-aaron",
+        "templateId": "ask-user",
         "kind": "human",
         "icon": "user-check",
         "color": "amber",

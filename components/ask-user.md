@@ -1,7 +1,7 @@
 ---
-id: ask-aaron
-name: Ask Aaron
-description: Put open questions to Aaron and wait for a decision.
+id: ask-user
+name: Ask user
+description: Put open questions to the user and wait for a decision.
 kind: human
 icon: user-check
 color: amber
