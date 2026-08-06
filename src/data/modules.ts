@@ -1,8 +1,6 @@
 import type { ComponentTemplate, WorkflowModuleDefinition } from '../types/workflow'
 
 /** Modules come from the repository's `modules/` directory or an import — none are bundled. */
-export const builtInModules: WorkflowModuleDefinition[] = []
-
 export const moduleComponentTemplates = (modules: WorkflowModuleDefinition[]): ComponentTemplate[] => modules.map((module) => ({
   id: `module-${module.id}`,
   moduleId: module.id,

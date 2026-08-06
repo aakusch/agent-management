@@ -41,15 +41,15 @@ import { TransitionInspector } from './components/TransitionInspector'
 import { WorkflowEdge } from './components/WorkflowEdge'
 import { WorkflowNode } from './components/WorkflowNode'
 import { WorkflowToolbar } from './components/WorkflowToolbar'
-import { componentLibrary, platformComponents } from './data/library'
-import { builtInModules, moduleComponentTemplates } from './data/modules'
-import { builtInTemplates } from './data/templates'
+import { platformComponents } from './data/library'
+import { moduleComponentTemplates } from './data/modules'
 import { markForReview, type ParsedAssets } from './lib/assets'
-import { DEFAULT_HANDOFF, edge, nodeFromTemplate, normalizeEdgeData, normalizeEdges, snapGrid } from './lib/graph'
+import { useDismissOnOutside, useToast } from './lib/hooks'
+import { DEFAULT_HANDOFF, edge, graphProblem, nodeFromTemplate, normalizeEdgeData, normalizeEdges, persistenceProblem, snapGrid } from './lib/graph'
 import { instanceId, slugify, uniqueId } from './lib/ids'
-import { isRecord, readStored, readStoredItems, removeStored, writeStored } from './lib/storage'
+import { readStored, readStoredItems, removeStored, writeStored } from './lib/storage'
 import { onWorkspaceFilesChanged, readWorkspaceFiles, serializeCatalyst, serializeComponent, serializeDocument, serializeModule, serializeTemplate, syncCollection, type WorkspaceFiles } from './lib/workspaceFiles'
-import { isCatalystDefinition, isComponentTemplate, isProjectContext, isWorkflowDocument, isWorkflowModuleDefinition, parseWorkflowImport } from './lib/validation'
+import { isCatalystDefinition, isComponentTemplate, isPendingRun, isProjectContext, isRunMonitorBoard, isWorkflowDocument, isWorkflowModuleDefinition, isWorkflowRecord, isWorkflowTemplate, parseWorkflowImport } from './lib/validation'
 import type {
   ComponentTemplate,
   ProjectContext,
@@ -58,6 +58,7 @@ import type {
   WorkflowEdge as WorkflowEdgeType,
   WorkflowNode as WorkflowNodeType,
   WorkflowModuleDefinition,
+  WorkflowSpecificationPolicy,
 } from './types/workflow'
 import type { CatalystDefinition, PendingRun, RunGraphSnapshot, RunMonitorBoard, WorkflowRecord, WorkflowTemplate } from './types/catalog'
 
@@ -68,66 +69,6 @@ const validPages: AppPage[] = ['dashboard', 'builder', 'module-builder', 'workfl
 const pageFromHash = () => {
   const candidate = window.location.hash.replace('#/', '') as AppPage
   return validPages.includes(candidate) ? candidate : 'dashboard'
-}
-
-const isWorkflowRecordList = (value: unknown): value is WorkflowRecord[] => Array.isArray(value) && value.every((item) =>
-  isRecord(item)
-  && typeof item.id === 'string'
-  && typeof item.name === 'string'
-  && typeof item.description === 'string'
-  && typeof item.nodeCount === 'number'
-  && ['draft', 'ready'].includes(String(item.status))
-  && ['starter', 'local', 'imported'].includes(String(item.source))
-  && (item.entryMode === undefined || ['manual', 'catalyst'].includes(String(item.entryMode)))
-  && (item.steps === undefined || (Array.isArray(item.steps) && item.steps.every((step) => typeof step === 'string'))),
-)
-
-const isWorkflowTemplateList = (value: unknown): value is WorkflowTemplate[] => Array.isArray(value) && value.every((item) =>
-  isRecord(item)
-  && typeof item.id === 'string'
-  && typeof item.name === 'string'
-  && typeof item.description === 'string'
-  && Array.isArray(item.steps)
-  && item.steps.every((step) => typeof step === 'string')
-  && Array.isArray(item.componentIds)
-  && item.componentIds.every((id) => typeof id === 'string')
-  && (item.moduleIds === undefined || (Array.isArray(item.moduleIds) && item.moduleIds.every((id) => typeof id === 'string')))
-  && (item.adaptationRules === undefined || Array.isArray(item.adaptationRules))
-  && (item.assets === undefined || isRecord(item.assets))
-  && typeof item.published === 'boolean',
-)
-
-const isPendingRun = (value: unknown): value is PendingRun => isRecord(value)
-  && typeof value.id === 'string'
-  && typeof value.workflowName === 'string'
-  && typeof value.createdAt === 'string'
-  && ['staged', 'waiting-for-runner'].includes(String(value.state))
-  && isRecord(value.configuration)
-  && typeof value.configuration.task === 'string'
-  && (value.configuration.specificationMode === undefined || ['adaptive', 'exact'].includes(String(value.configuration.specificationMode)))
-  && ['guided', 'adaptive', 'autonomous'].includes(String(value.configuration.autonomy))
-  && ['execute', 'dry-run'].includes(String(value.configuration.execution))
-
-const isMonitorBoard = (value: unknown): value is RunMonitorBoard => {
-  if (!isRecord(value)
-    || typeof value.name !== 'string'
-    || (value.columns !== 1 && value.columns !== 2)
-    || !Array.isArray(value.groups)
-    || !value.groups.length
-    || !Array.isArray(value.tiles)) return false
-  const groupIds = new Set<string>()
-  for (const group of value.groups) {
-    if (!isRecord(group) || typeof group.id !== 'string' || typeof group.name !== 'string' || groupIds.has(group.id)) return false
-    groupIds.add(group.id)
-  }
-  return value.tiles.every((tile) => isRecord(tile)
-    && typeof tile.id === 'string'
-    && typeof tile.groupId === 'string'
-    && groupIds.has(tile.groupId)
-    && typeof tile.workflowName === 'string'
-    && ['not-started', 'waiting-runner', 'running', 'blocked', 'completed'].includes(String(tile.status))
-    && Array.isArray(tile.steps)
-    && tile.steps.every((step) => typeof step === 'string'))
 }
 
 const readTheme = (): 'dark' | 'light' => {
@@ -187,6 +128,32 @@ const normalizeWorkflowNodes = (nodes: WorkflowNodeType[]): WorkflowNodeType[] =
   : node)
 
 const emptyGraph = (): { nodes: WorkflowNodeType[]; edges: WorkflowEdgeType[] } => ({ nodes: [], edges: [] })
+
+/**
+ * What the preflight may and may not do. The saved document and the driver bundle must declare the
+ * same policy — they were separate literals, and only one of them got updated.
+ *
+ * Keep in step with the `specification` block `relay-workflow create` writes.
+ */
+const SPECIFICATION_POLICY: WorkflowSpecificationPolicy = {
+  enabled: true,
+  componentId: 'workflow-specifier',
+  mode: 'guided',
+  artifact: 'run-spec.json',
+  maySelectOptionalModules: true,
+  mayBindProjectCommands: true,
+  mayConfigureNodes: true,
+  mayRemoveRequiredModules: false,
+  mayWidenPermissions: false,
+}
+
+/** The phase-0 record a staged run carries until a driver picks it up. */
+const stagedSpecification = (runId: string): PendingRun['specification'] => ({
+  phase: 0,
+  status: 'pending',
+  componentId: 'workflow-specifier',
+  artifact: `.relay/runs/${runId}/run-spec.json`,
+})
 
 function snapshotWithSpecification(nodes: WorkflowNodeType[], edges: WorkflowEdgeType[]): RunGraphSnapshot {
   const catalyst = nodes.find((node) => node.data.kind === 'catalyst')
@@ -266,12 +233,11 @@ function Workspace({ project, onUpdateProject, components, modules, onCreateModu
   const [moduleSaveOpen, setModuleSaveOpen] = useState(false)
   const [kickoffTask, setKickoffTask] = useState('')
   const [saveState, setSaveState] = useState<'saved' | 'saving'>('saved')
-  const [toast, setToast] = useState<{ message: string; tone: 'success' | 'error' } | null>(null)
   const [overflowOpen, setOverflowOpen] = useState(false)
   const [minimapVisible, setMinimapVisible] = useState(true)
   const importInput = useRef<HTMLInputElement>(null)
-  const overflowRef = useRef<HTMLDivElement>(null)
-  const toastTimer = useRef<number | null>(null)
+  const { toast, showToast } = useToast()
+  const overflowRef = useDismissOnOutside<HTMLDivElement>(overflowOpen, () => setOverflowOpen(false))
   const { screenToFlowPosition, fitView } = useReactFlow()
   const workflowComponents = useMemo<ComponentTemplate[]>(() => workflows
     .filter((workflow) => workflow.id !== workflowId)
@@ -316,32 +282,6 @@ function Workspace({ project, onUpdateProject, components, modules, onCreateModu
     () => nodes.find((node) => node.id === selectedEdge?.target),
     [nodes, selectedEdge],
   )
-
-  const showToast = useCallback((message: string, tone: 'success' | 'error' = 'success') => {
-    if (toastTimer.current) window.clearTimeout(toastTimer.current)
-    setToast({ message, tone })
-    toastTimer.current = window.setTimeout(() => setToast(null), 3200)
-  }, [])
-
-  useEffect(() => () => {
-    if (toastTimer.current) window.clearTimeout(toastTimer.current)
-  }, [])
-
-  useEffect(() => {
-    if (!overflowOpen) return
-    const closeOnOutsidePress = (event: PointerEvent) => {
-      if (!overflowRef.current?.contains(event.target as Node)) setOverflowOpen(false)
-    }
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOverflowOpen(false)
-    }
-    document.addEventListener('pointerdown', closeOnOutsidePress)
-    document.addEventListener('keydown', closeOnEscape)
-    return () => {
-      document.removeEventListener('pointerdown', closeOnOutsidePress)
-      document.removeEventListener('keydown', closeOnEscape)
-    }
-  }, [overflowOpen])
 
   const updateNode = useCallback((id: string, patch: Partial<WorkflowNodeType['data']>) => {
     setSaveState('saving')
@@ -460,30 +400,27 @@ function Workspace({ project, onUpdateProject, components, modules, onCreateModu
     schemaVersion: '1.0',
     id: workflowId,
     name: workflowName,
-    description: startingTemplate?.description ?? 'A reusable agent workflow compiled into a project-specific run specification at execution time.',
+    // Why: an opened document keeps the description it was authored with. Falling straight through to
+    // the generic sentence overwrote what an agent or the CLI had written into the file on every save.
+    description: startingTemplate?.description
+      ?? restoredDocument?.description
+      ?? 'A reusable agent workflow compiled into a project-specific run specification at execution time.',
     template: startingTemplate ? {
       id: startingTemplate.id,
       name: startingTemplate.name,
       requiredModuleIds: startingTemplate.moduleIds ?? [],
       adaptationRules: startingTemplate.adaptationRules ?? [],
     } : restoredDocument?.template,
-    project,
+    // Why: the workspace holds one project, and until it is connected that project is an empty seed.
+    // Writing it over the document's own context wiped the variables, effort, and permissions an
+    // agent or the CLI had authored into the file, every time the workflow was opened and saved.
+    project: project.root ? project : restoredDocument?.project ?? project,
     entry: hasCatalyst ? { mode: 'catalyst', nodeId: catalystNodes[0].id } : { mode: 'manual' },
-    specification: {
-      enabled: true,
-      componentId: 'workflow-specifier',
-      mode: 'guided',
-      artifact: 'run-spec.json',
-      maySelectOptionalModules: true,
-      mayBindProjectCommands: true,
-      mayConfigureNodes: true,
-      mayRemoveRequiredModules: false,
-      mayWidenPermissions: false,
-    },
+    specification: SPECIFICATION_POLICY,
     nodes: normalizeWorkflowNodes(nodes),
     edges,
     updatedAt: new Date().toISOString(),
-  }), [catalystNodes, edges, hasCatalyst, nodes, project, restoredDocument?.template, startingTemplate, workflowId, workflowName])
+  }), [catalystNodes, edges, hasCatalyst, nodes, project, restoredDocument?.description, restoredDocument?.project, restoredDocument?.template, startingTemplate, workflowId, workflowName])
 
   const assignmentForExport = useCallback((): RelayAssignmentBundle => {
     const workflowDocument = documentForExport()
@@ -523,17 +460,7 @@ function Workspace({ project, onUpdateProject, components, modules, onCreateModu
         eventLog: '.relay/runs/{{run.id}}/events.jsonl',
         artifactDirectory: '.relay/runs/{{run.id}}/artifacts',
         checkpointAfterEachNode: true,
-        specification: {
-          enabled: true,
-          componentId: 'workflow-specifier',
-          mode: 'guided',
-          artifact: 'run-spec.json',
-          maySelectOptionalModules: true,
-          mayBindProjectCommands: true,
-          mayConfigureNodes: true,
-          mayRemoveRequiredModules: false,
-          mayWidenPermissions: false,
-        },
+        specification: SPECIFICATION_POLICY,
         defaultModel: project.defaults.model,
         defaultEffort: project.defaults.effort,
         tools: project.defaults.tools,
@@ -559,11 +486,18 @@ function Workspace({ project, onUpdateProject, components, modules, onCreateModu
       showToast('Add at least one component before saving.', 'error')
       return false
     }
+    // Why: the loader refuses these graphs, so storing one loses the workflow on the next boot.
+    const blocking = persistenceProblem(nodes, edges)
+    if (blocking) {
+      showToast(blocking, 'error')
+      return false
+    }
     setSaveState('saving')
-    const saved = onSaveWorkflow(documentForExport(), {
+    const document = documentForExport()
+    const saved = onSaveWorkflow(document, {
       id: workflowId,
       name: workflowName,
-      description: startingTemplate?.description ?? 'Reusable workflow with a run-specific specification preflight.',
+      description: document.description,
       nodeCount: nodes.length,
       projectName: project.root ? project.name : undefined,
       updatedAt: new Date().toISOString(),
@@ -580,7 +514,7 @@ function Workspace({ project, onUpdateProject, components, modules, onCreateModu
     setSaveState('saved')
     showToast('Workflow saved locally')
     return true
-  }, [documentForExport, isCatalystEntrypointValid, nodes, onSaveWorkflow, project.name, project.root, showToast, startingTemplate?.description, workflowId, workflowName])
+  }, [documentForExport, edges, isCatalystEntrypointValid, nodes, onSaveWorkflow, project.name, project.root, showToast, workflowId, workflowName])
 
   const exportWorkflow = useCallback(() => {
     const blob = new Blob([JSON.stringify(assignmentForExport(), null, 2)], { type: 'application/json' })
@@ -602,37 +536,14 @@ function Workspace({ project, onUpdateProject, components, modules, onCreateModu
       showToast('Add at least one component before validating.', 'error')
       return false
     }
-    const nodeIds = new Set(nodes.map((node) => node.id))
-    const brokenEdge = edges.find((item) => !nodeIds.has(item.source) || !nodeIds.has(item.target))
-    if (brokenEdge) {
-      showToast(`Transition ${brokenEdge.id} references a missing component.`, 'error')
-      return false
-    }
-    if (catalystNodes.length > 1) {
-      showToast('Use one Catalyst start component per workflow.', 'error')
-      return false
-    }
-    const catalyst = catalystNodes[0]
-    if (catalyst && edges.some((edge) => edge.target === catalyst.id)) {
-      showToast('The Catalyst must be the starting point and cannot have incoming transitions.', 'error')
-      return false
-    }
-    if (catalyst && !edges.some((edge) => edge.source === catalyst.id)) {
-      showToast('Connect the Catalyst to the first executable component.', 'error')
-      return false
-    }
-    const roots = nodes.filter((node) => !edges.some((edge) => edge.target === node.id))
-    if (catalyst && roots.some((node) => node.id !== catalyst.id)) {
-      showToast('A catalyst workflow must route every executable component from its Catalyst start.', 'error')
-      return false
-    }
-    if (!roots.length) {
-      showToast('The workflow needs a starting component.', 'error')
+    const problem = graphProblem(nodes, edges)
+    if (problem) {
+      showToast(problem, 'error')
       return false
     }
     showToast(`Workflow valid · ${hasCatalyst ? 'catalyst entry' : 'manual entry'} · ${nodes.length} components · ${edges.length} transitions`)
     return true
-  }, [catalystNodes, edges, hasCatalyst, nodes, showToast])
+  }, [edges, hasCatalyst, nodes, showToast])
 
   const stageCatalystWorkflow = useCallback(() => {
     if (!validateWorkflow()) return
@@ -654,7 +565,7 @@ function Workspace({ project, onUpdateProject, components, modules, onCreateModu
       createdAt: new Date().toISOString(),
       state: 'staged',
       preparedBy: 'catalyst',
-      specification: { phase: 0, status: 'pending', componentId: 'workflow-specifier', artifact: `.relay/runs/${runId}/run-spec.json` },
+      specification: stagedSpecification(runId),
       graph: snapshotWithSpecification(nodes, edges),
     })
     onNavigate('runs')
@@ -691,7 +602,7 @@ function Workspace({ project, onUpdateProject, components, modules, onCreateModu
       createdAt: new Date().toISOString(),
       state: 'staged',
       preparedBy: 'user',
-      specification: { phase: 0, status: 'pending', componentId: 'workflow-specifier', artifact: `.relay/runs/${runId}/run-spec.json` },
+      specification: stagedSpecification(runId),
       graph: snapshotWithSpecification(nodes, edges),
     })
     showToast('Workflow staged — start it from Runs when ready')
@@ -872,9 +783,9 @@ export default function App() {
   // the whole-array guard and silently wipe the user's entire library on boot.
   const [customComponents, setCustomComponents] = useState<ComponentTemplate[]>(() => readStoredItems('relay.components', isComponentTemplate))
   const [customModules, setCustomModules] = useState<WorkflowModuleDefinition[]>(() => readStoredItems('relay.modules', isWorkflowModuleDefinition))
-  const [workflows, setWorkflows] = useState<WorkflowRecord[]>(() => readStored('relay.workflows', [], isWorkflowRecordList)
+  const [workflows, setWorkflows] = useState<WorkflowRecord[]>(() => readStoredItems('relay.workflows', isWorkflowRecord)
     .filter((workflow) => workflow.source !== 'starter'))
-  const [userTemplates, setUserTemplates] = useState<WorkflowTemplate[]>(() => readStored('relay.userTemplates', [], isWorkflowTemplateList))
+  const [userTemplates, setUserTemplates] = useState<WorkflowTemplate[]>(() => readStoredItems('relay.userTemplates', isWorkflowTemplate))
   // Why: one document per workflow id. The old single 'relay.workflow' slot meant a second workflow
   // silently overwrote the first, which also made nesting a saved workflow impossible.
   const [documents, setDocuments] = useState<WorkflowDocument[]>(() => {
@@ -900,27 +811,13 @@ export default function App() {
       groups: [{ id: 'workspace', name: 'Workspace', projectName: project.root ? project.name : undefined }],
       tiles: [],
     }
-    const saved = readStored('relay.monitorBoard', fallback, isMonitorBoard)
+    const saved = readStored('relay.monitorBoard', fallback, isRunMonitorBoard)
     return { ...saved, tiles: saved.tiles.filter((tile) => tile.status !== 'not-started') }
   })
-  // Why: edits to a seeded asset are stored as a user override keyed by id. Substituting the override
-  // in place (instead of filter + append) keeps a card from jumping to the end of the grid on save.
-  const components = useMemo(() => {
-    const overrides = new Map(customComponents.map((item) => [item.id, item]))
-    const seededIds = new Set(componentLibrary.map((item) => item.id))
-    return [
-      ...componentLibrary.map((item) => overrides.get(item.id) ?? item),
-      ...customComponents.filter((item) => !seededIds.has(item.id)),
-    ]
-  }, [customComponents])
-  const modules = useMemo(() => {
-    const overrides = new Map(customModules.map((item) => [item.id, item]))
-    const seededIds = new Set(builtInModules.map((item) => item.id))
-    return [
-      ...builtInModules.map((item) => overrides.get(item.id) ?? item),
-      ...customModules.filter((item) => !seededIds.has(item.id)),
-    ]
-  }, [customModules])
+  // Why: nothing is bundled — the library is whatever the repository directories, an import, or the
+  // creator put there. `platformComponents` is the one exception, and it is not user-editable.
+  const components = customComponents
+  const modules = customModules
 
   // Why: the repo directories are the contract with the CLI and with agents. When the dev bridge is
   // available it wins over localStorage on boot, and every later change is mirrored back to disk.
@@ -1100,6 +997,9 @@ export default function App() {
     const fromId = document.id
     const toId = uniqueWorkflowId(record.name, fromId)
     const saved = { ...document, id: toId }
+    // Why: storing a document the loader rejects loses it silently on the next boot. The builder
+    // reports the specific rule; this is the backstop for every other caller.
+    if (!isWorkflowDocument(saved)) return false
     const others = retargetReferences(documents.filter((item) => item.id !== fromId), fromId, toId)
     const next = [...others, saved]
     if (!writeStored('relay.documents', next)) return false
@@ -1214,7 +1114,7 @@ export default function App() {
       createdAt: new Date().toISOString(),
       state: 'staged',
       preparedBy: 'user',
-      specification: { phase: 0, status: 'pending', componentId: 'workflow-specifier', artifact: `.relay/runs/${runId}/run-spec.json` },
+      specification: stagedSpecification(runId),
       graph,
     }
     setStagedRuns((current) => [run, ...current.filter((item) => item.id !== run.id)])
@@ -1296,7 +1196,7 @@ export default function App() {
       theme={theme}
       onToggleTheme={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')}
       workflows={workflows}
-      templates={[...userTemplates, ...builtInTemplates]}
+      templates={userTemplates}
       onCreateTemplate={(template) => setUserTemplates((current) => [template, ...current.filter((item) => item.id !== template.id)])}
       onToggleTemplatePublished={(id) => setUserTemplates((current) => current.map((template) => template.id === id ? { ...template, published: !template.published } : template))}
       onUseTemplate={useTemplate}

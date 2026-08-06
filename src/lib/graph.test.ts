@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { CANVAS_GRID, DEFAULT_HANDOFF, edge, nodeFromTemplate, normalizeEdgeData, normalizeEdges, snapToGrid } from './graph'
-import type { ComponentTemplate } from '../types/workflow'
+import { CANVAS_GRID, DEFAULT_HANDOFF, edge, graphProblem, nodeFromTemplate, normalizeEdgeData, normalizeEdges, persistenceProblem, snapToGrid } from './graph'
+import type { ComponentTemplate, WorkflowEdge, WorkflowNode } from '../types/workflow'
 
 const template: ComponentTemplate = {
   id: 'code-review', name: 'Code review', description: 'Reviews a diff.', kind: 'judge',
@@ -88,5 +88,66 @@ describe('edge', () => {
     const created = edge('a-b', 'a', 'b')
     expect(created.type).toBe('workflow')
     expect(created.markerEnd).toMatchObject({ width: 16, height: 16 })
+  })
+})
+
+const graphNode = (id: string, kind: WorkflowNode['data']['kind'] = 'agent'): WorkflowNode =>
+  ({ ...nodeFromTemplate({ ...template, kind }, id, { x: 0, y: 0 }) })
+
+const graphEdge = (id: string, source: string, target: string): WorkflowEdge => edge(id, source, target)
+
+describe('persistenceProblem', () => {
+  it('accepts a graph the loader can parse back', () => {
+    expect(persistenceProblem([graphNode('a'), graphNode('b')], [graphEdge('a-b', 'a', 'b')])).toBeNull()
+  })
+
+  // Why: saving used to skip validation, so these graphs were stored and then silently dropped by
+  // `isWorkflowDocument` on the next boot — the workflow disappeared while its list record stayed.
+  it('rejects a second catalyst', () => {
+    const problem = persistenceProblem([graphNode('one', 'catalyst'), graphNode('two', 'catalyst')], [])
+    expect(problem).toMatch(/one Catalyst/i)
+  })
+
+  it('rejects a transition into the catalyst', () => {
+    const nodes = [graphNode('start', 'catalyst'), graphNode('work')]
+    const problem = persistenceProblem(nodes, [graphEdge('work-start', 'work', 'start')])
+    expect(problem).toMatch(/cannot have incoming/i)
+  })
+
+  it('rejects duplicate node and transition ids', () => {
+    expect(persistenceProblem([graphNode('a'), graphNode('a')], [])).toMatch(/share the id a/)
+    const nodes = [graphNode('a'), graphNode('b')]
+    expect(persistenceProblem(nodes, [graphEdge('dupe', 'a', 'b'), graphEdge('dupe', 'b', 'a')])).toMatch(/share the id dupe/)
+  })
+
+  it('rejects a transition pointing at a component that is gone', () => {
+    expect(persistenceProblem([graphNode('a')], [graphEdge('a-ghost', 'a', 'ghost')])).toMatch(/missing component/)
+  })
+})
+
+describe('graphProblem', () => {
+  it('accepts a connected catalyst graph', () => {
+    const nodes = [graphNode('start', 'catalyst'), graphNode('work')]
+    expect(graphProblem(nodes, [graphEdge('start-work', 'start', 'work')])).toBeNull()
+  })
+
+  it('requires the catalyst to reach the first component', () => {
+    expect(graphProblem([graphNode('start', 'catalyst'), graphNode('work')], [])).toMatch(/Connect the Catalyst/)
+  })
+
+  it('requires every component to route from the catalyst', () => {
+    const nodes = [graphNode('start', 'catalyst'), graphNode('work'), graphNode('orphan')]
+    const problem = graphProblem(nodes, [graphEdge('start-work', 'start', 'work')])
+    expect(problem).toMatch(/route every executable component/)
+  })
+
+  it('requires a starting component when every node has an incoming transition', () => {
+    const nodes = [graphNode('a'), graphNode('b')]
+    const cycle = [graphEdge('a-b', 'a', 'b'), graphEdge('b-a', 'b', 'a')]
+    expect(graphProblem(nodes, cycle)).toMatch(/needs a starting component/)
+  })
+
+  it('reports loader-fatal problems first', () => {
+    expect(graphProblem([graphNode('x', 'catalyst'), graphNode('y', 'catalyst')], [])).toMatch(/one Catalyst/i)
   })
 })

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { parseComponentMarkdown } from './assets'
-import { componentToMarkdown, readWorkspaceFiles, serializeModule, syncCollection } from './workspaceFiles'
-import type { ComponentTemplate } from '../types/workflow'
+import { componentToMarkdown, readWorkspaceFiles, serializeDocument, serializeModule, syncCollection } from './workspaceFiles'
+import type { ComponentTemplate, WorkflowDocument } from '../types/workflow'
 
 const component: ComponentTemplate = {
   id: 'code-review', name: 'Code review', description: 'Reviews a diff.', kind: 'judge',
@@ -131,5 +131,43 @@ describe('syncCollection', () => {
     stubFetch(() => { throw new Error('ECONNREFUSED') })
     const problems = await syncCollection('workflows', [{ id: 'new' }], [], serialize)
     expect(problems).toHaveLength(1)
+  })
+})
+
+describe('serializeDocument', () => {
+  const document = {
+    schemaVersion: '1.0', id: 'flow', name: 'Flow', description: '', updatedAt: '2026-08-04T00:00:00.000Z',
+    project: {
+      name: 'Relay', root: '/repo', branch: 'main', variables: {},
+      defaults: { model: 'auto', effort: 'medium', maxParallelAgents: 3, tools: ['git'] },
+      permissions: { spawnAgents: true, shell: 'project', network: 'ask', publish: 'ask' },
+    },
+    nodes: [{
+      id: 'a', type: 'workflow', position: { x: 0, y: 0 },
+      measured: { width: 304, height: 156 }, selected: true, dragging: false, width: 304, height: 156,
+      data: { label: 'A', description: '', templateId: 'c', kind: 'agent', icon: 'bot', color: 'mint', status: 'idle', instruction: '', overrides: {} },
+    }],
+    edges: [{ id: 'a-a', source: 'a', target: 'a', type: 'workflow', selected: true, data: { handoff: 'summary' } }],
+  } as unknown as WorkflowDocument
+
+  // Why: viewport state made every save rewrite the file, so opening a workflow produced a diff.
+  it('drops the runtime layout and selection React Flow adds', () => {
+    const written = JSON.parse(serializeDocument(document))
+    expect(written.nodes[0]).not.toHaveProperty('measured')
+    expect(written.nodes[0]).not.toHaveProperty('selected')
+    expect(written.nodes[0]).not.toHaveProperty('dragging')
+    expect(written.nodes[0]).not.toHaveProperty('width')
+    expect(written.edges[0]).not.toHaveProperty('selected')
+  })
+
+  it('keeps the graph itself intact', () => {
+    const written = JSON.parse(serializeDocument(document))
+    expect(written.nodes[0]).toMatchObject({ id: 'a', type: 'workflow', position: { x: 0, y: 0 } })
+    expect(written.nodes[0].data).toMatchObject({ label: 'A', templateId: 'c', kind: 'agent' })
+    expect(written.edges[0]).toMatchObject({ id: 'a-a', source: 'a', target: 'a', data: { handoff: 'summary' } })
+  })
+
+  it('ends with a newline so the file is a well-formed text file', () => {
+    expect(serializeDocument(document).endsWith('\n')).toBe(true)
   })
 })

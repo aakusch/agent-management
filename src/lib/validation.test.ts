@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isCatalystDefinition, isComponentTemplate, isWorkflowDocument, isWorkflowModuleDefinition, parseWorkflowImport } from './validation'
+import { isCatalystDefinition, isComponentTemplate, isPendingRun, isRunMonitorBoard, isWorkflowDocument, isWorkflowModuleDefinition, isWorkflowRecord, isWorkflowTemplate, parseWorkflowImport } from './validation'
 import type { ProjectContext, WorkflowDocument } from '../types/workflow'
 
 const project: ProjectContext = {
@@ -186,5 +186,82 @@ describe('isCatalystDefinition', () => {
   it('rejects an empty id or name', () => {
     expect(isCatalystDefinition({ ...valid, id: '' })).toBe(false)
     expect(isCatalystDefinition({ ...valid, name: '' })).toBe(false)
+  })
+})
+
+describe('isWorkflowRecord', () => {
+  const record = (overrides: Record<string, unknown> = {}) => ({
+    id: 'flow', name: 'Flow', description: '', nodeCount: 2, status: 'ready', source: 'local', ...overrides,
+  })
+
+  it('accepts a saved record', () => {
+    expect(isWorkflowRecord(record())).toBe(true)
+    expect(isWorkflowRecord(record({ entryMode: 'catalyst', steps: ['one'] }))).toBe(true)
+  })
+
+  it('rejects unknown status, source, and entry mode', () => {
+    expect(isWorkflowRecord(record({ status: 'archived' }))).toBe(false)
+    expect(isWorkflowRecord(record({ source: 'elsewhere' }))).toBe(false)
+    expect(isWorkflowRecord(record({ entryMode: 'cron' }))).toBe(false)
+    expect(isWorkflowRecord(record({ steps: ['ok', 3] }))).toBe(false)
+  })
+})
+
+describe('isWorkflowTemplate', () => {
+  const template = (overrides: Record<string, unknown> = {}) => ({
+    id: 'release', name: 'Release', description: '', level: 'Guided', steps: [],
+    componentIds: [], source: 'user', published: false, ...overrides,
+  })
+
+  it('accepts a template', () => {
+    expect(isWorkflowTemplate(template())).toBe(true)
+  })
+
+  // Why: the storage guard used to skip `level` and `source`, so a template stored without them
+  // loaded fine and then crashed the Templates page on `template.level.toLowerCase()`.
+  it('rejects a template with no level or an unknown one', () => {
+    expect(isWorkflowTemplate(template({ level: undefined }))).toBe(false)
+    expect(isWorkflowTemplate(template({ level: 'Expert' }))).toBe(false)
+    expect(isWorkflowTemplate(template({ source: undefined }))).toBe(false)
+  })
+})
+
+describe('isPendingRun', () => {
+  const run = (configuration: Record<string, unknown> = {}) => ({
+    id: 'run-1', workflowName: 'Flow', createdAt: '2026-08-04T00:00:00.000Z', state: 'staged',
+    configuration: { task: 'Ship it', autonomy: 'adaptive', execution: 'execute', ...configuration },
+  })
+
+  it('accepts a staged run', () => {
+    expect(isPendingRun(run())).toBe(true)
+    expect(isPendingRun(run({ specificationMode: 'exact' }))).toBe(true)
+  })
+
+  it('rejects unknown autonomy, execution, and specification modes', () => {
+    expect(isPendingRun(run({ autonomy: 'full' }))).toBe(false)
+    expect(isPendingRun(run({ execution: 'simulate' }))).toBe(false)
+    expect(isPendingRun(run({ specificationMode: 'loose' }))).toBe(false)
+  })
+})
+
+describe('isRunMonitorBoard', () => {
+  const board = (overrides: Record<string, unknown> = {}) => ({
+    name: 'Codebase runs', columns: 2, groups: [{ id: 'workspace', name: 'Workspace' }],
+    tiles: [{ id: 'run-1', groupId: 'workspace', workflowName: 'Flow', status: 'running', steps: [] }],
+    ...overrides,
+  })
+
+  it('accepts a board whose tiles all point at a real group', () => {
+    expect(isRunMonitorBoard(board())).toBe(true)
+  })
+
+  it('rejects a tile in a group that does not exist', () => {
+    expect(isRunMonitorBoard(board({ tiles: [{ id: 'r', groupId: 'gone', workflowName: 'Flow', status: 'running', steps: [] }] }))).toBe(false)
+  })
+
+  it('rejects duplicate groups, no groups, and an unsupported column count', () => {
+    expect(isRunMonitorBoard(board({ groups: [] }))).toBe(false)
+    expect(isRunMonitorBoard(board({ groups: [{ id: 'a', name: 'A' }, { id: 'a', name: 'A again' }] }))).toBe(false)
+    expect(isRunMonitorBoard(board({ columns: 3 }))).toBe(false)
   })
 })

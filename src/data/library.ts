@@ -1,11 +1,12 @@
 import type { ComponentTemplate } from '../types/workflow'
 
 /**
- * Relay ships with no components. The workspace is filled from the repository's `components/`
- * directory through the dev filesystem bridge, by import, or by composing them in the app.
+ * Relay bundles no authorable components. The workspace is filled from the repository's
+ * `components/` directory through the dev filesystem bridge, by import, or by the in-app creator.
+ *
+ * Platform components are the exception: Relay configures and operates them rather than prompting
+ * them as agents, so they are supplied here and cannot be edited or deleted.
  */
-export const componentLibrary: ComponentTemplate[] = []
-
 export const platformComponents: ComponentTemplate[] = [{
   id: 'catalyst',
   name: 'Catalyst',

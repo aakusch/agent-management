@@ -176,8 +176,27 @@ export async function syncCollection<T extends { id: string }>(
   return results.filter((item): item is string => item !== null)
 }
 
+/**
+ * React Flow decorates the nodes it renders with measured sizes, drag state, and selection. None of
+ * that belongs in a portable document: it made every save rewrite the file with viewport noise, so a
+ * `git diff` after opening a workflow looked like a real edit.
+ */
+function withoutRuntimeState(document: WorkflowDocument): WorkflowDocument {
+  return {
+    ...document,
+    nodes: document.nodes.map(({ measured, selected, dragging, width, height, ...node }) => {
+      void measured; void selected; void dragging; void width; void height
+      return node
+    }),
+    edges: document.edges.map(({ selected, ...item }) => {
+      void selected
+      return item
+    }),
+  }
+}
+
 export const serializeComponent = componentToMarkdown
 export const serializeModule = (module: WorkflowModuleDefinition) => stringify(module)
 export const serializeTemplate = (template: WorkflowTemplate) => stringify(template)
-export const serializeDocument = (document: WorkflowDocument) => stringify(document)
+export const serializeDocument = (document: WorkflowDocument) => stringify(withoutRuntimeState(document))
 export const serializeCatalyst = (catalyst: CatalystDefinition) => stringify(catalyst)

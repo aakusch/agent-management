@@ -80,6 +80,46 @@ export function nodeFromTemplate(
   }
 }
 
+/**
+ * The graph rules `isWorkflowDocument` refuses to parse.
+ *
+ * Why this is separate from the authoring check below: saving used to skip validation entirely, so a
+ * board with two Catalysts wrote a document the loader then rejected — the workflow vanished on the
+ * next boot while its list record stayed behind, opening an empty builder. Anything fatal to the
+ * loader has to block the save instead.
+ */
+export function persistenceProblem(nodes: WorkflowNode[], edges: WorkflowEdge[]): string | null {
+  const nodeIds = new Set<string>()
+  for (const node of nodes) {
+    if (nodeIds.has(node.id)) return `Two components share the id ${node.id}. Delete one and add it again.`
+    nodeIds.add(node.id)
+  }
+  const edgeIds = new Set<string>()
+  for (const item of edges) {
+    if (edgeIds.has(item.id)) return `Two transitions share the id ${item.id}. Delete one and reconnect.`
+    edgeIds.add(item.id)
+    if (!nodeIds.has(item.source) || !nodeIds.has(item.target)) return `Transition ${item.id} references a missing component.`
+  }
+  const catalysts = nodes.filter((node) => node.data.kind === 'catalyst')
+  if (catalysts.length > 1) return 'Use one Catalyst start component per workflow.'
+  if (catalysts.length === 1 && edges.some((item) => item.target === catalysts[0].id)) {
+    return 'The Catalyst must be the starting point and cannot have incoming transitions.'
+  }
+  return null
+}
+
+/** Every authoring rule, including the ones a document can technically be stored without. */
+export function graphProblem(nodes: WorkflowNode[], edges: WorkflowEdge[]): string | null {
+  const fatal = persistenceProblem(nodes, edges)
+  if (fatal) return fatal
+  const catalyst = nodes.find((node) => node.data.kind === 'catalyst')
+  if (catalyst && !edges.some((item) => item.source === catalyst.id)) return 'Connect the Catalyst to the first executable component.'
+  const roots = nodes.filter((node) => !edges.some((item) => item.target === node.id))
+  if (catalyst && roots.some((node) => node.id !== catalyst.id)) return 'A catalyst workflow must route every executable component from its Catalyst start.'
+  if (!roots.length) return 'The workflow needs a starting component.'
+  return null
+}
+
 export const edge = (
   id: string,
   source: string,

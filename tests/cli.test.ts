@@ -89,6 +89,26 @@ describe('relay-workflow add-node', () => {
     await relay('add-node', file, '--id', 'a', '--name', 'A', '--component', 'c')
     expect((await relay('add-node', file, '--id', 'a', '--name', 'A', '--component', 'c')).stderr).toMatch(/already exists/)
   })
+
+  // Why: the app refuses to save these graphs. The CLI has to agree, or an agent writes a workflow
+  // the builder then rejects on open.
+  it('reports a catalyst that reaches nothing', async () => {
+    await relay('add-node', file, '--id', 'start', '--name', 'Start', '--component', 'catalyst', '--kind', 'catalyst')
+    await relay('add-node', file, '--id', 'review', '--name', 'Review', '--component', 'code-review')
+    const result = await relay('validate', file)
+    expect(result.code).toBe(1)
+    expect(result.stderr).toMatch(/catalyst must connect to the first executable component/)
+  })
+
+  it('reports a component no transition reaches from the catalyst', async () => {
+    await relay('add-node', file, '--id', 'start', '--name', 'Start', '--component', 'catalyst', '--kind', 'catalyst')
+    await relay('add-node', file, '--id', 'review', '--name', 'Review', '--component', 'code-review')
+    await relay('add-node', file, '--id', 'orphan', '--name', 'Orphan', '--component', 'code-review')
+    await relay('connect', file, '--from', 'start', '--to', 'review')
+    const result = await relay('validate', file)
+    expect(result.code).toBe(1)
+    expect(result.stderr).toMatch(/reachable from the catalyst.*orphan/s)
+  })
 })
 
 describe('relay-workflow connect', () => {

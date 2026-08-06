@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Background,
   BackgroundVariant,
@@ -31,6 +31,7 @@ import { WorkflowNode } from './WorkflowNode'
 import { WorkflowToolbar } from './WorkflowToolbar'
 import { componentColors } from '../lib/componentIcons'
 import { DEFAULT_HANDOFF, edge, nodeFromTemplate, normalizeEdgeData, snapGrid } from '../lib/graph'
+import { useToast } from '../lib/hooks'
 import { instanceId, uniqueId } from '../lib/ids'
 import type {
   ComponentTemplate,
@@ -97,18 +98,8 @@ export function ModuleComposer({ module, modules, components, project, theme, on
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
   const [libraryOpen, setLibraryOpen] = useState(true)
   const [minimapVisible, setMinimapVisible] = useState(true)
-  const [toast, setToast] = useState<{ message: string; tone: 'success' | 'error' } | null>(null)
-  const toastTimer = useRef<number | null>(null)
+  const { toast, showToast } = useToast()
   const { screenToFlowPosition, fitView } = useReactFlow()
-
-  const showToast = useCallback((message: string, tone: 'success' | 'error' = 'success') => {
-    if (toastTimer.current) window.clearTimeout(toastTimer.current)
-    setToast({ message, tone })
-    toastTimer.current = window.setTimeout(() => setToast(null), 3200)
-  }, [])
-  useEffect(() => () => {
-    if (toastTimer.current) window.clearTimeout(toastTimer.current)
-  }, [])
 
   const missingComponents = module ? module.nodes.length - startingGraph.nodes.length : 0
   useEffect(() => {

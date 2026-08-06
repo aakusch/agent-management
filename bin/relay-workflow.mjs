@@ -94,6 +94,16 @@ function validate(workflow) {
   if (catalysts[0] && (workflow.entry?.mode !== 'catalyst' || workflow.entry?.nodeId !== catalysts[0].id)) errors.push('catalyst must be the declared entry node')
   if (catalysts[0] && workflow.edges.some((edge) => edge?.target === catalysts[0].id)) errors.push('the catalyst is the starting point and cannot receive a transition')
   if (!catalysts.length && workflow.entry?.mode === 'catalyst') errors.push('entry mode is "catalyst" but the graph has no catalyst node')
+  // Why: a catalyst workflow starts at exactly one place, so an executable node no transition reaches
+  // can never run. The app enforces this on save; the CLI has to agree or an agent writes a graph the
+  // builder then refuses.
+  if (catalysts[0]) {
+    if (!workflow.edges.some((edge) => edge?.source === catalysts[0].id)) errors.push('the catalyst must connect to the first executable component')
+    const unreachable = workflow.nodes
+      .filter((node) => node?.id !== catalysts[0].id && !workflow.edges.some((edge) => edge?.target === node?.id))
+      .map((node) => node?.id)
+    if (unreachable.length) errors.push(`every component must be reachable from the catalyst; these have no incoming transition: ${unreachable.join(', ')}`)
+  }
   return errors
 }
 

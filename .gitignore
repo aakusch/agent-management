@@ -13,3 +13,4 @@ vite.config.d.ts
 # Local UI captures kept out of the repository
 v[0-9]*.png
 w[0-9]*.png
+.superpowers/

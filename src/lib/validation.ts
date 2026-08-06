@@ -1,5 +1,5 @@
 import type { ComponentTemplate, ProjectContext, RelayAssignmentBundle, WorkflowDocument, WorkflowModuleDefinition } from '../types/workflow'
-import type { CatalystDefinition, WorkflowTemplate } from '../types/catalog'
+import type { CatalystDefinition, PendingRun, RunMonitorBoard, WorkflowRecord, WorkflowTemplate } from '../types/catalog'
 import { isRecord, isStringArray } from './storage'
 
 const componentKinds = new Set(['agent', 'judge', 'router', 'human', 'tool', 'module', 'workflow', 'catalyst'])
@@ -236,6 +236,60 @@ export function isWorkflowTemplate(value: unknown): value is WorkflowTemplate {
     && (value.assets.components === undefined || (Array.isArray(value.assets.components) && value.assets.components.every(isComponentTemplate)))
     && (value.assets.modules === undefined || (Array.isArray(value.assets.modules) && value.assets.modules.every(isWorkflowModuleDefinition)))
     && (value.assets.workflow === undefined || isWorkflowDocument(value.assets.workflow))
+}
+
+/**
+ * The catalog records the workspace persists alongside the assets above.
+ *
+ * Why these live here and are per item: `readStoredItems` drops only the entry that fails, so a
+ * record written by an older build cannot discard the whole list. A whole-array guard used to.
+ */
+export function isWorkflowRecord(value: unknown): value is WorkflowRecord {
+  return isRecord(value)
+    && typeof value.id === 'string'
+    && typeof value.name === 'string'
+    && typeof value.description === 'string'
+    && typeof value.nodeCount === 'number'
+    && ['draft', 'ready'].includes(String(value.status))
+    && ['starter', 'local', 'imported'].includes(String(value.source))
+    && (value.entryMode === undefined || ['manual', 'catalyst'].includes(String(value.entryMode)))
+    && (value.steps === undefined || isStringArray(value.steps))
+}
+
+export function isPendingRun(value: unknown): value is PendingRun {
+  return isRecord(value)
+    && typeof value.id === 'string'
+    && typeof value.workflowName === 'string'
+    && typeof value.createdAt === 'string'
+    && ['staged', 'waiting-for-runner'].includes(String(value.state))
+    && isRecord(value.configuration)
+    && typeof value.configuration.task === 'string'
+    && (value.configuration.specificationMode === undefined || ['adaptive', 'exact'].includes(String(value.configuration.specificationMode)))
+    && ['guided', 'adaptive', 'autonomous'].includes(String(value.configuration.autonomy))
+    && ['execute', 'dry-run'].includes(String(value.configuration.execution))
+}
+
+const monitorStatuses = new Set(['not-started', 'waiting-runner', 'running', 'blocked', 'completed'])
+
+export function isRunMonitorBoard(value: unknown): value is RunMonitorBoard {
+  if (!isRecord(value)
+    || typeof value.name !== 'string'
+    || (value.columns !== 1 && value.columns !== 2)
+    || !Array.isArray(value.groups)
+    || !value.groups.length
+    || !Array.isArray(value.tiles)) return false
+  const groupIds = new Set<string>()
+  for (const group of value.groups) {
+    if (!isRecord(group) || typeof group.id !== 'string' || typeof group.name !== 'string' || groupIds.has(group.id)) return false
+    groupIds.add(group.id)
+  }
+  return value.tiles.every((tile) => isRecord(tile)
+    && typeof tile.id === 'string'
+    && typeof tile.groupId === 'string'
+    && groupIds.has(tile.groupId)
+    && typeof tile.workflowName === 'string'
+    && monitorStatuses.has(String(tile.status))
+    && isStringArray(tile.steps))
 }
 
 export interface ParsedWorkflowImport {

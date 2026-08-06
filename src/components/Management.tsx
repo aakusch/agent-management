@@ -41,6 +41,7 @@ import type { ComponentKind, ComponentTemplate, ProjectCapability, ProjectContex
 import type { CatalystDefinition, CatalystKind, PendingRun, RunMonitorBoard, WorkflowRecord, WorkflowTemplate } from '../types/catalog'
 import { AGENT_AUTHORING_SPEC, clearReview, describeAssets, REVIEW_TAG, mergeParsedAssets, needsReview, parseAssetFile, type ParsedAssets } from '../lib/assets'
 import { componentColors, componentIconOptions, iconFor, iconForKind } from '../lib/componentIcons'
+import { useDismissOnOutside } from '../lib/hooks'
 import { slugify, uniqueId } from '../lib/ids'
 import { RunBoard } from './RunBoard'
 import { StartRunModal, type RunConfiguration } from './StartRunModal'
@@ -165,23 +166,7 @@ export function Management({
   onToggleCatalyst,
 }: ManagementProps) {
   const [overflowOpen, setOverflowOpen] = useState(false)
-  const overflowRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (!overflowOpen) return
-    const close = (event: PointerEvent) => {
-      if (!overflowRef.current?.contains(event.target as Node)) setOverflowOpen(false)
-    }
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOverflowOpen(false)
-    }
-    document.addEventListener('pointerdown', close)
-    document.addEventListener('keydown', closeOnEscape)
-    return () => {
-      document.removeEventListener('pointerdown', close)
-      document.removeEventListener('keydown', closeOnEscape)
-    }
-  }, [overflowOpen])
+  const overflowRef = useDismissOnOutside<HTMLDivElement>(overflowOpen, () => setOverflowOpen(false))
 
   return (
     <main className="app-shell management-shell">

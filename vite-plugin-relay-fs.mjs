@@ -29,6 +29,24 @@ export function safeTarget(root, dir, name) {
   return rel && !rel.startsWith('..') ? target : null
 }
 
+/**
+ * Refuses a write that came from another site.
+ *
+ * Why: this endpoint writes files into the repository, and any page open in the same browser can
+ * reach a dev server on localhost. A same-origin request from the workspace carries an `Origin` that
+ * matches the host it was served from; a drive-by page carries its own. Requests with no `Origin` at
+ * all (curl, the CLI, a test) are allowed — the header is what identifies a browser-driven caller.
+ */
+export function isSameOrigin(headers) {
+  const origin = headers.origin
+  if (!origin) return true
+  try {
+    return new URL(origin).host === headers.host
+  } catch {
+    return false
+  }
+}
+
 async function readAssets(root) {
   const perDirectory = await Promise.all(ASSET_DIRS.map(async (dir) => {
     let names
@@ -73,6 +91,7 @@ export function relayFilesystem() {
             }
 
             if (req.method === 'PUT' || req.method === 'DELETE') {
+              if (!isSameOrigin(req.headers)) return json(res, 403, { error: 'cross-origin writes are refused' })
               const chunks = []
               let size = 0
               for await (const chunk of req) {
