@@ -51,6 +51,8 @@ export function parseComponentMarkdown(markdown: string, fallbackId?: string): C
     tags: parseList(metadata.tags),
     instruction,
   }
+  const outcomes = parseList(metadata.outcomes)
+  if (outcomes.length) component.outcomes = outcomes
 
   const missing = [
     !component.id && 'id',

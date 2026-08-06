@@ -7,6 +7,7 @@ icon: bug
 color: rose
 version: 0.1.0
 tags: bhg, verification, triage, needs-review
+outcomes: ours, environmental, pre-existing
 ---
 
 Read the failing output and diagnose it.

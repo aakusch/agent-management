@@ -43,6 +43,8 @@ export function componentToMarkdown(component: ComponentTemplate): string {
     `version: ${component.version}`,
     `tags: ${component.tags.map(line).filter(Boolean).join(', ')}`,
   ]
+  // Only written when declared, so components that just succeed or fail stay unchanged.
+  if (component.outcomes?.length) frontmatter.push(`outcomes: ${component.outcomes.map(line).filter(Boolean).join(', ')}`)
   return `---\n${frontmatter.join('\n')}\n---\n\n${component.instruction.trim()}\n`
 }
 

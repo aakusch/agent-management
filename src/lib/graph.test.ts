@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CANVAS_GRID, DEFAULT_HANDOFF, edge, graphProblem, nodeFromTemplate, normalizeEdgeData, normalizeEdges, persistenceProblem, snapToGrid } from './graph'
+import { CANVAS_GRID, DEFAULT_HANDOFF, describeWhen, edge, graphProblem, nextUnroutedOutcome, nodeFromTemplate, normalizeEdgeData, normalizeEdges, persistenceProblem, routingProblem, snapToGrid, whenLabel, whenOptions } from './graph'
 import type { ComponentTemplate, WorkflowEdge, WorkflowNode } from '../types/workflow'
 
 const template: ComponentTemplate = {
@@ -37,7 +37,7 @@ describe('nodeFromTemplate', () => {
 
 describe('normalizeEdgeData', () => {
   it('defaults an edge with no data', () => {
-    expect(normalizeEdgeData(undefined)).toEqual({ tone: 'default', trigger: 'always', handoff: DEFAULT_HANDOFF })
+    expect(normalizeEdgeData(undefined)).toEqual({ tone: 'default', when: 'always', handoff: DEFAULT_HANDOFF })
   })
 
   it('keeps a valid handoff choice', () => {
@@ -63,10 +63,25 @@ describe('normalizeEdgeData', () => {
     expect(normalized.label).toBe('keep')
   })
 
-  it('falls back to "always" for an unrecognized trigger', () => {
-    expect(normalizeEdgeData({ trigger: 'whenever' }).trigger).toBe('always')
-    expect(normalizeEdgeData({ trigger: 'condition' }).trigger).toBe('condition')
-    expect(normalizeEdgeData({ trigger: 'human' }).trigger).toBe('human')
+  // Routing used to be a hand-typed expression that nothing validated; old graphs collapse into
+  // the single `when` name so they keep working.
+  it('collapses a legacy condition into the outcome it named', () => {
+    expect(normalizeEdgeData({ trigger: 'condition', condition: 'route == ship' }).when).toBe('ship')
+    expect(normalizeEdgeData({ trigger: 'condition', condition: 'verdict == pass' }).when).toBe('pass')
+    expect(normalizeEdgeData({ trigger: 'condition', condition: 'revise' }).when).toBe('revise')
+  })
+
+  it('maps a legacy human trigger to approval and anything else to always', () => {
+    expect(normalizeEdgeData({ trigger: 'human' }).when).toBe('approved')
+    expect(normalizeEdgeData({ trigger: 'whenever' }).when).toBe('always')
+    expect(normalizeEdgeData({ trigger: 'condition' }).when).toBe('always')
+  })
+
+  it('keeps an explicit when and drops the legacy pair', () => {
+    const data = normalizeEdgeData({ when: 'escalate', trigger: 'condition', condition: 'route == ship' })
+    expect(data.when).toBe('escalate')
+    expect(data.condition).toBeUndefined()
+    expect(data.trigger).toBeUndefined()
   })
 
   it('preserves a bounded loop policy', () => {
@@ -149,5 +164,113 @@ describe('graphProblem', () => {
 
   it('reports loader-fatal problems first', () => {
     expect(graphProblem([graphNode('x', 'catalyst'), graphNode('y', 'catalyst')], [])).toMatch(/one Catalyst/i)
+  })
+})
+
+const judge = (id: string, outcomes?: string[]): WorkflowNode => {
+  const n = nodeFromTemplate({ ...template, kind: 'judge', outcomes }, id, { x: 0, y: 0 })
+  return n
+}
+
+describe('outcomes on a node', () => {
+  it('are copied from the component, so a document validates on its own', () => {
+    expect(judge('j', ['pass', 'revise']).data.outcomes).toEqual(['pass', 'revise'])
+    expect(judge('j').data.outcomes).toBeUndefined()
+  })
+})
+
+describe('whenOptions', () => {
+  it('offers the declared outcomes plus the universal results', () => {
+    const ids = whenOptions(judge('j', ['pass', 'revise', 'escalate'])).map((o) => o.id)
+    expect(ids).toEqual(['always', 'pass', 'revise', 'escalate', 'failed', 'else'])
+  })
+
+  it('offers only the universal results when nothing is declared', () => {
+    expect(whenOptions(judge('j')).map((o) => o.id)).toEqual(['always', 'failed', 'else'])
+  })
+
+  it('adds approval only for a human step', () => {
+    const human = nodeFromTemplate({ ...template, kind: 'human' }, 'h', { x: 0, y: 0 })
+    expect(whenOptions(human).map((o) => o.id)).toContain('approved')
+    expect(whenOptions(judge('j')).map((o) => o.id)).not.toContain('approved')
+  })
+})
+
+describe('describeWhen and whenLabel', () => {
+  it('reads as plain language in the picker', () => {
+    expect(describeWhen('always')).toBe('Whenever it finishes')
+    expect(describeWhen('pass')).toBe('When it passes')
+    expect(describeWhen('revise')).toBe('When it says revise')
+    expect(describeWhen('else')).toBe('Anything else')
+  })
+
+  // The default draws no label, so a plain linear graph carries no routing furniture at all.
+  it('labels the board with the outcome name and leaves the default bare', () => {
+    expect(whenLabel('always')).toBe('')
+    expect(whenLabel(undefined)).toBe('')
+    expect(whenLabel('revise')).toBe('revise')
+    expect(whenLabel('else')).toBe('otherwise')
+  })
+})
+
+describe('nextUnroutedOutcome', () => {
+  // Dragging three connectors off a judge should land its three outcomes with nothing to configure.
+  it('walks the declared outcomes in order as connectors are drawn', () => {
+    const j = judge('j', ['pass', 'revise', 'escalate'])
+    const drawn: WorkflowEdge[] = []
+    const picked: string[] = []
+    for (let i = 0; i < 3; i++) {
+      const when = nextUnroutedOutcome(j, drawn)
+      picked.push(when)
+      drawn.push({ ...edge(`e${i}`, 'j', `t${i}`), data: { when } })
+    }
+    expect(picked).toEqual(['pass', 'revise', 'escalate'])
+  })
+
+  it('falls back to always once every outcome is routed, or when none are declared', () => {
+    const j = judge('j', ['pass'])
+    expect(nextUnroutedOutcome(j, [{ ...edge('e', 'j', 't'), data: { when: 'pass' } }])).toBe('always')
+    expect(nextUnroutedOutcome(judge('j'), [])).toBe('always')
+  })
+})
+
+describe('routingProblem', () => {
+  const pair = (when: string, id = 'e1', target = 'b') => ({ ...edge(id, 'j', target), data: { when } })
+
+  it('accepts a fully routed judge', () => {
+    const nodes = [judge('j', ['pass', 'revise']), graphNode('b'), graphNode('c')]
+    expect(routingProblem(nodes, [pair('pass'), pair('revise', 'e2', 'c')])).toBeNull()
+  })
+
+  it('rejects a second fallback', () => {
+    const nodes = [judge('j', ['pass']), graphNode('b'), graphNode('c')]
+    const problem = routingProblem(nodes, [pair('else'), pair('else', 'e2', 'c')])
+    expect(problem).toMatch(/Only one can be the fallback/)
+  })
+
+  // PRODUCT.md requires a router to define a fallback; nothing enforced it before.
+  it('rejects a partly routed judge with no fallback', () => {
+    const nodes = [judge('j', ['pass', 'revise', 'escalate']), graphNode('b')]
+    expect(routingProblem(nodes, [pair('pass')])).toMatch(/escalate/)
+  })
+
+  it('accepts a partly routed judge that has a fallback', () => {
+    const nodes = [judge('j', ['pass', 'revise']), graphNode('b'), graphNode('c')]
+    expect(routingProblem(nodes, [pair('pass'), pair('else', 'e2', 'c')])).toBeNull()
+  })
+
+  it('leaves a step alone until it routes an outcome at all', () => {
+    const nodes = [judge('j', ['pass', 'revise']), graphNode('b')]
+    expect(routingProblem(nodes, [pair('always')])).toBeNull()
+  })
+
+  // ui-quality-loop already had a two-way join with undefined semantics.
+  it('requires a step with several incoming paths to say whether it waits', () => {
+    const target = graphNode('gate')
+    const nodes = [graphNode('a'), graphNode('b'), target]
+    const edges = [graphEdge('a-gate', 'a', 'gate'), graphEdge('b-gate', 'b', 'gate')]
+    expect(routingProblem(nodes, edges)).toMatch(/waits for all/)
+    target.data.waitForAll = true
+    expect(routingProblem(nodes, edges)).toBeNull()
   })
 })

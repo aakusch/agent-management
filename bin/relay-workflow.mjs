@@ -36,7 +36,7 @@ function help() {
   process.stdout.write(`  relay-workflow create <file> --name <name> [--project-root <path>]\n`)
   process.stdout.write(`  relay-workflow inspect <file>\n`)
   process.stdout.write(`  relay-workflow add-node <file> --id <id> --name <label> --component <id> [--kind ${NODE_KINDS.join('|')}] [--module <module-id>] [--instruction <text>]\n`)
-  process.stdout.write(`  relay-workflow connect <file> --from <node> --to <node> [--label <label>] [--condition <expression>] [--loop <count>] [--handoff summary|full|signal]\n`)
+  process.stdout.write(`  relay-workflow connect <file> --from <node> --to <node> [--when always|failed|else|<outcome>] [--label <label>] [--loop <count>] [--handoff summary|full|signal]\n`)
   process.stdout.write(`  relay-workflow validate <file>\n`)
   process.stdout.write(`  relay-workflow stage <file> --objective <prompt> [--autonomy guided|adaptive|autonomous] [--execution execute|dry-run] [--specification adaptive|exact] [--out <file>]\n`)
   process.stdout.write(`\nFlags accept --key value or --key=value.\n`)
@@ -88,6 +88,29 @@ function validate(workflow) {
     const handoff = edge?.data?.handoff
     if (handoff !== undefined && !HANDOFFS.includes(handoff)) errors.push(`edge ${edge.id} has an unknown handoff "${handoff}" (expected ${HANDOFFS.join(', ')})`)
     if (edge?.data?.loop && !['bounded', 'until-cancelled'].includes(edge.data.loop.mode)) errors.push(`edge ${edge.id} has an unknown loop mode "${edge.data.loop.mode}"`)
+  }
+  // routing: a connector may only name a result its source can report
+  for (const node of workflow.nodes) {
+    const outgoing = workflow.edges.filter((e) => e?.source === node?.id)
+    const declared = Array.isArray(node?.data?.outcomes) ? node.data.outcomes : []
+    const allowed = ['always', 'failed', 'else', 'approved', ...declared]
+    const elses = outgoing.filter((e) => e?.data?.when === 'else')
+    if (elses.length > 1) errors.push(`node ${node?.id} has ${elses.length} "else" paths; only one may be the fallback`)
+    for (const e of outgoing) {
+      const when = e?.data?.when
+      if (when !== undefined && !allowed.includes(when)) {
+        errors.push(`edge ${e.id} routes "${when}", which ${node?.id} cannot report (allowed: ${allowed.join(', ')})`)
+      }
+    }
+    const routed = new Set(outgoing.map((e) => e?.data?.when));
+    if (declared.some((name) => routed.has(name)) && !elses.length) {
+      const missing = declared.filter((name) => !routed.has(name))
+      if (missing.length) errors.push(`node ${node?.id} can report ${missing.join(', ')} with nothing routing it; add those paths or an "else"`)
+    }
+    const incoming = workflow.edges.filter((e) => e?.target === node?.id)
+    if (incoming.length > 1 && node?.data?.waitForAll === undefined) {
+      errors.push(`node ${node?.id} has ${incoming.length} incoming paths and must set waitForAll`)
+    }
   }
   const catalysts = workflow.nodes.filter((node) => node?.data?.kind === 'catalyst')
   if (catalysts.length > 1) errors.push('only one catalyst is allowed')
@@ -183,7 +206,15 @@ async function main() {
     if (catalyst && catalyst.id === to) return fail('a catalyst is the starting point and cannot receive a transition')
     const id = text(flags.id) || `${from}-${to}`
     if (workflow.edges.some((edge) => edge?.id === id)) return fail(`transition ${id} already exists`)
-    const condition = text(flags.condition) || undefined
+    // Why a name, not an expression: routing may only pick an outcome the source step declares,
+    // which is what lets both the app and this CLI check it without running anything.
+    const source = workflow.nodes.find((node) => node?.id === from)
+    const declared = Array.isArray(source?.data?.outcomes) ? source.data.outcomes : []
+    const when = text(flags.when) || 'always'
+    const allowed = ['always', 'failed', 'else', 'approved', ...declared]
+    if (!allowed.includes(when)) {
+      return fail(`--when must be one of ${allowed.join(', ')}${declared.length ? '' : ' (this step declares no outcomes)'}`)
+    }
     const handoff = text(flags.handoff) || 'summary'
     if (!HANDOFFS.includes(handoff)) return fail(`--handoff must be ${HANDOFFS.join(', ')}`)
     // Why: `Number('abc')` is NaN and `Number(true)` is 1, so an unparsable or valueless --loop used
@@ -196,7 +227,7 @@ async function main() {
     workflow.edges.push({
       id, source: from, target: to, type: 'workflow',
       data: {
-        label: text(flags.label) || undefined, trigger: condition ? 'condition' : 'always', condition,
+        label: text(flags.label) || undefined, when,
         tone: loopCount ? 'danger' : 'default', handoff,
         loop: loopCount ? { mode: 'bounded', maxIterations: loopCount, stopOnNoProgress: 2, onExhausted: 'human' } : undefined,
       },

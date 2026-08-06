@@ -120,12 +120,20 @@ describe('relay-workflow connect', () => {
 
   it('connects two nodes with a summary handoff by default', async () => {
     expect((await relay('connect', file, '--from', 'a', '--to', 'b')).code).toBe(0)
-    expect((await workflow()).edges[0]).toMatchObject({ id: 'a-b', source: 'a', target: 'b', type: 'workflow', data: { handoff: 'summary', trigger: 'always' } })
+    expect((await workflow()).edges[0]).toMatchObject({ id: 'a-b', source: 'a', target: 'b', type: 'workflow', data: { handoff: 'summary', when: 'always' } })
   })
 
-  it('marks a condition trigger when a condition is supplied', async () => {
-    await relay('connect', file, '--from', 'a', '--to', 'b', '--condition', 'verdict == pass')
-    expect((await workflow()).edges[0].data).toMatchObject({ trigger: 'condition', condition: 'verdict == pass' })
+  // Why a name and not an expression: routing may only pick an outcome the source declares, so
+  // both the app and this CLI can check it without executing anything.
+  it('refuses an outcome the source step cannot report', async () => {
+    const result = await relay('connect', file, '--from', 'a', '--to', 'b', '--when', 'ship')
+    expect(result.code).toBe(1)
+    expect(result.stderr).toMatch(/--when must be one of/)
+  })
+
+  it('accepts a universal result on a step that declares no outcomes', async () => {
+    expect((await relay('connect', file, '--from', 'a', '--to', 'b', '--when', 'failed')).code).toBe(0)
+    expect((await workflow()).edges[0].data).toMatchObject({ when: 'failed' })
   })
 
   it('rejects an unknown handoff', async () => {

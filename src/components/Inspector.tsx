@@ -8,6 +8,7 @@ import {
   FolderGit2,
   GitFork,
   Layers3,
+  Merge,
   RotateCcw,
   Settings2,
   SlidersHorizontal,
@@ -34,6 +35,8 @@ interface InspectorProps {
   onBindCatalyst: (id: string) => void
   modules: WorkflowModuleDefinition[]
   onExpandModule: (nodeId: string) => void
+  /** How many connectors lead into this node, so it can offer the join choice. */
+  incomingCount?: number
 }
 
 const effortOptions: { id: ReasoningEffort; label: string; detail: string }[] = [
@@ -51,7 +54,7 @@ const toolOptions: { id: RelayTool; label: string }[] = [
   { id: 'web', label: 'Web' },
 ]
 
-export function Inspector({ node, project, sourceInstruction, catalysts, workflowId, onClose, onUpdateNode, onOpenProjectConfig, onOpenCatalysts, onToggleCatalyst, onBindCatalyst, modules, onExpandModule }: InspectorProps) {
+export function Inspector({ node, project, sourceInstruction, catalysts, workflowId, onClose, onUpdateNode, onOpenProjectConfig, onOpenCatalysts, onToggleCatalyst, onBindCatalyst, modules, onExpandModule, incomingCount = 0 }: InspectorProps) {
   const [tab, setTab] = useState<'setup' | 'prompt' | 'source'>('setup')
   if (!node) return null
 
@@ -64,7 +67,6 @@ export function Inspector({ node, project, sourceInstruction, catalysts, workflo
   const supportsTools = supportsAgentRuntime || node.data.kind === 'tool'
   const isCatalyst = node.data.kind === 'catalyst'
   const isModule = node.data.kind === 'module'
-  const isLogic = node.data.kind === 'router'
 
   const updateExecution = <Key extends keyof NonNullable<WorkflowNode['data']['execution']>>(
     key: Key,
@@ -85,7 +87,6 @@ export function Inspector({ node, project, sourceInstruction, catalysts, workflo
     const custom = execution.tools ?? [...project.defaults.tools]
     updateExecution('tools', custom.includes(tool) ? custom.filter((item) => item !== tool) : [...custom, tool])
   }
-  const updateOverride = (key: string, value: string) => onUpdateNode(node.id, { overrides: { ...node.data.overrides, [key]: value } })
 
   if (isCatalyst) {
     // Unbound catalysts are configured independently; attaching one here is what binds it.
@@ -180,11 +181,16 @@ export function Inspector({ node, project, sourceInstruction, catalysts, workflo
             </>}
           </section>}
 
-          {isLogic && <section className="form-section inspector-section-card logic-settings-card">
-            <div className="inspector-section-heading"><span><GitFork size={14} /></span><div><h3>Deterministic logic</h3><p>Configure values and routes; no model is invoked.</p></div></div>
-            <label><span>{node.data.templateId === 'switch-route' ? 'Cases' : node.data.templateId === 'merge-join' ? 'Join rule' : node.data.templateId.includes('test-result') ? 'Required checks' : node.data.templateId.includes('artifact') ? 'Required artifacts' : 'Expression or rule'}</span><textarea className="mono-input" rows={3} value={node.data.overrides['logic.rule'] ?? ''} onChange={(event) => updateOverride('logic.rule', event.target.value)} placeholder={node.data.templateId === 'switch-route' ? 'severity=critical → escalate\nseverity=warning → review\ndefault → continue' : node.data.templateId === 'merge-join' ? 'all required branches' : node.data.templateId.includes('test-result') ? 'typecheck, lint, test, build' : node.data.templateId.includes('artifact') ? 'patch, test_report' : 'verdict == pass'} /></label>
-            <div className="form-row"><label><span>Success route</span><input value={node.data.overrides['logic.success'] ?? 'pass'} onChange={(event) => updateOverride('logic.success', event.target.value)} /></label><label><span>Fallback route</span><input value={node.data.overrides['logic.fallback'] ?? 'fail'} onChange={(event) => updateOverride('logic.fallback', event.target.value)} /></label></div>
-            <label><span>Missing or invalid input</span><select value={node.data.overrides['logic.onUnknown'] ?? 'block'} onChange={(event) => updateOverride('logic.onUnknown', event.target.value)}><option value="block">Block and report</option><option value="fallback">Use fallback route</option><option value="human">Ask a human</option></select></label>
+          {Boolean(node.data.outcomes?.length) && <section className="form-section inspector-section-card">
+            <div className="inspector-section-heading"><span><GitFork size={14} /></span><div><h3>What this step reports</h3><p>Connectors leaving it may route these.</p></div></div>
+            <div className="outcome-list">{node.data.outcomes!.map((name) => <span key={name}>{name}</span>)}</div>
+            <p className="form-hint">Declared by the component, so every workflow using it routes the same results.</p>
+          </section>}
+
+          {incomingCount > 1 && <section className="form-section inspector-section-card">
+            <div className="inspector-section-heading"><span><Merge size={14} /></span><div><h3>{incomingCount} paths lead here</h3><p>Decide when this step starts.</p></div></div>
+            <label className="permission-toggle"><div><strong>Wait for all of them</strong><small>Off means it starts on the first path to arrive.</small></div>
+              <input type="checkbox" checked={node.data.waitForAll !== false} onChange={(event) => onUpdateNode(node.id, { waitForAll: event.target.checked })} /></label>
           </section>}
 
           {node.data.subworkflow && <section className="form-section inspector-section-card nested-workflow-settings">

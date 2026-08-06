@@ -1,5 +1,5 @@
 import { GitBranch, PackageOpen, RotateCcw, Route, TimerReset, X } from 'lucide-react'
-import { DEFAULT_HANDOFF } from '../lib/graph'
+import { DEFAULT_HANDOFF, describeWhen, whenLabel, whenOptions } from '../lib/graph'
 import type { WorkflowEdge, WorkflowEdgeData, WorkflowHandoff, WorkflowNode } from '../types/workflow'
 
 interface TransitionInspectorProps {
@@ -34,7 +34,10 @@ export function TransitionInspector({
   if (!edge) return null
 
   const data = edge.data ?? {}
-  const trigger = data.trigger ?? (data.condition ? 'condition' : 'always')
+  const when = data.when ?? 'always'
+  const options = whenOptions(sourceNode)
+  // An outcome the source no longer declares stays listed so the choice is visible, not silently lost.
+  const listed = options.some((option) => option.id === when) ? options : [...options, { id: when, label: describeWhen(when) }]
   const handoff = data.handoff ?? DEFAULT_HANDOFF
   const loop = data.loop
   const updateLoop = (patch: Partial<NonNullable<WorkflowEdgeData['loop']>>) => {
@@ -57,38 +60,29 @@ export function TransitionInspector({
 
       <div className="inspector-scroll">
         <section className="form-section">
-          <h3><GitBranch size={14} /> Routing</h3>
+          <h3><GitBranch size={14} /> When this path runs</h3>
           <label>
-            <span>Connection label <em>Optional</em></span>
-            <input
-              value={data.label ?? ''}
-              placeholder="e.g. approved"
-              onChange={(event) => onUpdateEdge(edge.id, { label: event.target.value })}
-            />
-          </label>
-          <label>
-            <span>Continue when</span>
+            <span>Run this path</span>
             <select
-              value={trigger}
-              onChange={(event) => onUpdateEdge(edge.id, { trigger: event.target.value as WorkflowEdgeData['trigger'] })}
+              value={when}
+              onChange={(event) => onUpdateEdge(edge.id, { when: event.target.value })}
             >
-              <option value="always">Previous step completes</option>
-              <option value="condition">Condition matches</option>
-              <option value="human">Human approves</option>
+              {listed.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
             </select>
           </label>
-          {trigger === 'condition' && (
-            <label>
-              <span>Condition</span>
-              <input
-                className="mono-input"
-                value={data.condition ?? ''}
-                placeholder="route == approved"
-                onChange={(event) => onUpdateEdge(edge.id, { condition: event.target.value })}
-              />
-            </label>
-          )}
-          {trigger === 'human' && <p className="form-hint">The driver pauses this route until a user approves it in the CLI or run view.</p>}
+          <p className="form-hint">
+            {sourceNode?.data.outcomes?.length
+              ? `${sourceNode.data.label} can report ${sourceNode.data.outcomes.join(', ')}.`
+              : `${sourceNode?.data.label ?? 'This step'} reports only whether it finished or failed.`}
+          </p>
+          <label>
+            <span>Label on the board <em>Optional</em></span>
+            <input
+              value={data.label ?? ''}
+              placeholder={whenLabel(when) || 'no label'}
+              onChange={(event) => onUpdateEdge(edge.id, { label: event.target.value || undefined })}
+            />
+          </label>
         </section>
 
         <section className="form-section">

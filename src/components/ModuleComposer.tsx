@@ -30,7 +30,7 @@ import { WorkflowEdge } from './WorkflowEdge'
 import { WorkflowNode } from './WorkflowNode'
 import { WorkflowToolbar } from './WorkflowToolbar'
 import { componentColors } from '../lib/componentIcons'
-import { DEFAULT_HANDOFF, edge, nodeFromTemplate, normalizeEdgeData, snapGrid } from '../lib/graph'
+import { DEFAULT_HANDOFF, edge, nextUnroutedOutcome, nodeFromTemplate, normalizeEdgeData, snapGrid } from '../lib/graph'
 import { useToast } from '../lib/hooks'
 import { instanceId, uniqueId } from '../lib/ids'
 import type {
@@ -143,9 +143,9 @@ export function ModuleComposer({ module, modules, components, project, theme, on
       id: instanceId('edge'),
       type: 'workflow',
       markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16 },
-      data: { tone: 'default', trigger: 'always', handoff: DEFAULT_HANDOFF },
+      data: { tone: 'default', when: nextUnroutedOutcome(nodes.find((node) => node.id === connection.source), current), handoff: DEFAULT_HANDOFF },
     }, current))
-  }, [setEdges])
+  }, [nodes, setEdges])
 
   const onDrop = useCallback((event: React.DragEvent) => {
     event.preventDefault()
@@ -305,6 +305,7 @@ export function ModuleComposer({ module, modules, components, project, theme, on
             onToggleCatalyst={() => undefined}
             onBindCatalyst={() => undefined}
             modules={modules}
+            incomingCount={edges.filter((item) => item.target === selectedNode.id).length}
             onExpandModule={() => showToast('Nested modules stay linked inside a module composition.', 'error')}
           />
         ) : selectedEdge ? (

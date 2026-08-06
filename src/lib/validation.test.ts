@@ -265,3 +265,50 @@ describe('isRunMonitorBoard', () => {
     expect(isRunMonitorBoard(board({ columns: 3 }))).toBe(false)
   })
 })
+
+describe('routing in a stored document', () => {
+  const routed = (sourceOutcomes: string[] | undefined, when: string): unknown => document({
+    nodes: [node('one', sourceOutcomes ? { outcomes: sourceOutcomes } : {}), node('two')],
+    edges: [{ id: 'one-two', source: 'one', target: 'two', type: 'workflow', data: { when } }],
+  } as never)
+
+  it('accepts a universal result and a declared outcome', () => {
+    expect(isWorkflowDocument(routed(undefined, 'always'))).toBe(true)
+    expect(isWorkflowDocument(routed(undefined, 'failed'))).toBe(true)
+    expect(isWorkflowDocument(routed(undefined, 'else'))).toBe(true)
+    expect(isWorkflowDocument(routed(['ship'], 'ship'))).toBe(true)
+  })
+
+  // The node carries its component's outcomes, which is what lets this be checked with no library.
+  it('rejects an outcome the source step cannot report', () => {
+    expect(isWorkflowDocument(routed(['ship'], 'revise'))).toBe(false)
+    expect(isWorkflowDocument(routed(undefined, 'ship'))).toBe(false)
+  })
+
+  it('rejects an empty or non-string when', () => {
+    expect(isWorkflowDocument(routed(['ship'], ''))).toBe(false)
+  })
+
+  it('rejects outcomes that shadow a universal result', () => {
+    expect(isWorkflowDocument(document({ nodes: [node('one', { outcomes: ['always'] }), node('two')] } as never))).toBe(false)
+    expect(isWorkflowDocument(document({ nodes: [node('one', { outcomes: ['failed'] }), node('two')] } as never))).toBe(false)
+  })
+
+  it('rejects a non-boolean join choice', () => {
+    expect(isWorkflowDocument(document({ nodes: [node('one', { waitForAll: 'yes' }), node('two')] } as never))).toBe(false)
+    expect(isWorkflowDocument(document({ nodes: [node('one', { waitForAll: true }), node('two')] } as never))).toBe(true)
+  })
+})
+
+describe('isComponentTemplate outcomes', () => {
+  const base = {
+    id: 'delivery-gate', name: 'Delivery gate', description: 'Route it.', kind: 'router',
+    icon: 'split', color: 'cyan', version: '0.1.0', tags: [], instruction: 'Route.',
+  }
+  it('accepts a declared list and rejects a shadowing or empty name', () => {
+    expect(isComponentTemplate({ ...base, outcomes: ['ship', 'revise'] })).toBe(true)
+    expect(isComponentTemplate({ ...base, outcomes: ['else'] })).toBe(false)
+    expect(isComponentTemplate({ ...base, outcomes: [''] })).toBe(false)
+    expect(isComponentTemplate({ ...base, outcomes: 'ship' })).toBe(false)
+  })
+})

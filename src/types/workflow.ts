@@ -31,6 +31,14 @@ export interface ComponentTemplate {
   /** Optional documentation only — Relay does not ask authors to declare a port contract. */
   inputs?: string[]
   outputs?: string[]
+  /**
+   * What this step can report back, e.g. ['ship', 'revise', 'escalate'].
+   *
+   * Why it matters: a connector leaving this step may only route an outcome the step can
+   * actually produce, so the builder offers exactly these (plus the universal results) and
+   * never a free-text expression.
+   */
+  outcomes?: string[]
   instruction: string
   defaults?: Record<string, string>
   workflowId?: string
@@ -110,6 +118,10 @@ export interface WorkflowNodeData extends Record<string, unknown> {
   icon: string
   color: string
   status: NodeStatus
+  /** Copied from the component so a document can be validated on its own, as `instruction` is. */
+  outcomes?: string[]
+  /** With more than one incoming connector: wait for all of them, or start on the first. */
+  waitForAll?: boolean
   runtime?: string
   tokens?: string
   result?: string
@@ -140,10 +152,20 @@ export type WorkflowNode = Node<WorkflowNodeData, 'workflow'>
 /** What crosses a transition. One choice, not a field-by-field manifest. */
 export type WorkflowHandoff = 'signal' | 'summary' | 'full'
 
+/**
+ * When a connector runs. Either one of the universal results, or the name of an outcome the
+ * source step declares. There is deliberately no expression syntax.
+ */
+export type WorkflowWhen = string
+export const UNIVERSAL_WHEN: readonly string[] = ['always', 'failed', 'else']
+
 export interface WorkflowEdgeData extends Record<string, unknown> {
   label?: string
   tone?: 'default' | 'success' | 'danger' | 'warning'
+  when?: WorkflowWhen
+  /** @deprecated read-only legacy: collapsed into `when` by normalizeEdgeData. */
   trigger?: 'always' | 'condition' | 'human'
+  /** @deprecated read-only legacy: collapsed into `when` by normalizeEdgeData. */
   condition?: string
   handoff?: WorkflowHandoff
   loop?: {

@@ -7,6 +7,7 @@ icon: split
 color: cyan
 version: 0.1.0
 tags: bhg, gate, needs-review
+outcomes: ship, revise, escalate
 ---
 
 Combine the upstream results into a single route. No model judgment beyond these rules.

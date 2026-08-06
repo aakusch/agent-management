@@ -766,6 +766,17 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .component-create-actions { margin: 18px -26px -23px; padding: 13px 26px; border-top: 1px solid var(--line-soft); background: #0c1014; }
 .component-create-actions > span { margin-right: auto; color: #59646f; font: 8px ui-monospace, SFMono-Regular, Menlo, monospace; }
 .component-create-actions .primary-cta:disabled { cursor: not-allowed; opacity: .4; }
+.outcome-list { display: flex; flex-wrap: wrap; gap: 7px; margin: 4px 0 10px; }
+.outcome-list span {
+  padding: 4px 9px;
+  border: 1px solid color-mix(in srgb, var(--tone, var(--cyan)) 30%, var(--line));
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--tone, var(--cyan)) 8%, transparent);
+  color: color-mix(in srgb, var(--tone, var(--cyan)) 68%, var(--muted));
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  letter-spacing: .02em;
+}
 .contract-grid { margin: 19px 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }.contract-grid div { padding: 10px; border: 1px solid #242b33; border-radius: 7px; background: #0d1115; }.contract-grid span, .contract-grid strong { display: block; }.contract-grid span { color: #5c6671; font-size: 8px; text-transform: uppercase; }.contract-grid strong { margin-top: 5px; color: #abb3bd; font-size: 10px; text-transform: capitalize; }.contract-grid strong.plain { text-transform: none; }
 .editor-form { display: grid; gap: 13px; }.editor-form.two-column, .two-column { grid-template-columns: 1fr 1fr; gap: 10px; }.editor-form label { display: block; }.editor-form label > span { display: block; margin-bottom: 6px; color: #7a8490; font-size: 9px; }.editor-form input, .editor-form textarea, .editor-form select { width: 100%; padding: 9px 10px; color: #c9d0d8; border: 1px solid #28303a; border-radius: 7px; outline: 0; background: #0d1116; font-size: 10px; line-height: 1.55; resize: vertical; }.editor-form input:focus, .editor-form textarea:focus, .editor-form select:focus { border-color: #426156; }.editor-form .source-editor { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: #aab4bf; }.editor-form details { padding: 10px; border: 1px solid #232a32; border-radius: 7px; }.editor-form summary { color: #7e8893; font-size: 9px; cursor: pointer; }.editor-form details .two-column { display: grid; margin-top: 12px; }
 .editor-actions { margin-top: 18px; display: flex; justify-content: flex-end; gap: 8px; }.source-footer { margin-top: 9px; display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; }.source-path { min-width: 0; display: flex; align-items: center; gap: 7px; color: #5d6874; font: 9px ui-monospace, SFMono-Regular, Menlo, monospace; }

@@ -132,3 +132,16 @@ describe('mergeParsedAssets', () => {
     expect(merged.modules).toHaveLength(1)
   })
 })
+
+describe('component outcomes in frontmatter', () => {
+  const md = (extra: string) => `---\nid: delivery-gate\nname: Delivery gate\nkind: router\n${extra}---\n\nRoute it.\n`
+
+  it('parses a declared outcome list', () => {
+    expect(parseComponentMarkdown(md('outcomes: ship, revise, escalate\n')).outcomes).toEqual(['ship', 'revise', 'escalate'])
+  })
+
+  it('leaves outcomes undefined when the component only succeeds or fails', () => {
+    expect(parseComponentMarkdown(md('')).outcomes).toBeUndefined()
+    expect(parseComponentMarkdown(md('outcomes:\n')).outcomes).toBeUndefined()
+  })
+})

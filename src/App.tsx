@@ -45,7 +45,7 @@ import { platformComponents } from './data/library'
 import { moduleComponentTemplates } from './data/modules'
 import { markForReview, type ParsedAssets } from './lib/assets'
 import { useDismissOnOutside, useToast } from './lib/hooks'
-import { DEFAULT_HANDOFF, edge, graphProblem, nodeFromTemplate, normalizeEdgeData, normalizeEdges, persistenceProblem, snapGrid } from './lib/graph'
+import { DEFAULT_HANDOFF, edge, graphProblem, nextUnroutedOutcome, nodeFromTemplate, normalizeEdgeData, normalizeEdges, persistenceProblem, snapGrid } from './lib/graph'
 import { instanceId, slugify, uniqueId } from './lib/ids'
 import { readStored, readStoredItems, removeStored, writeStored } from './lib/storage'
 import { onWorkspaceFilesChanged, readWorkspaceFiles, serializeCatalyst, serializeComponent, serializeDocument, serializeModule, serializeTemplate, syncCollection, type WorkspaceFiles } from './lib/workspaceFiles'
@@ -212,7 +212,7 @@ function graphFromTemplate(template: WorkflowTemplate | undefined, components: C
     node.id,
     nodes[index + 1].id,
     {
-      data: { tone: 'default', trigger: 'always', handoff: DEFAULT_HANDOFF },
+      data: { tone: 'default', when: 'always', handoff: DEFAULT_HANDOFF },
     },
   ))
   return { nodes, edges }
@@ -383,7 +383,7 @@ function Workspace({ project, onUpdateProject, components, modules, onCreateModu
       id: instanceId('edge'),
       type: 'workflow',
       markerEnd: { type: MarkerType.ArrowClosed, width: 16, height: 16 },
-      data: { tone: 'default', trigger: 'always', handoff: DEFAULT_HANDOFF },
+      data: { tone: 'default', when: nextUnroutedOutcome(nodes.find((node) => node.id === connection.source), current), handoff: DEFAULT_HANDOFF },
     }, current))
     setSaveState('saving')
   }, [nodes, setEdges, showToast])
@@ -731,6 +731,7 @@ function Workspace({ project, onUpdateProject, components, modules, onCreateModu
           onBindCatalyst={(id) => onBindCatalyst(id, workflowId, workflowName)}
           modules={modules}
           onExpandModule={expandModule}
+          incomingCount={selectedNode ? edges.filter((item) => item.target === selectedNode.id).length : 0}
         />
         <TransitionInspector
           edge={selectedEdge}

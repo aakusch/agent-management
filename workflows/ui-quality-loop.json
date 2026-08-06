@@ -108,7 +108,8 @@
         "color": "coral",
         "status": "idle",
         "instruction": "Use the component source.",
-        "overrides": {}
+        "overrides": {},
+        "waitForAll": true
       }
     },
     {
@@ -139,11 +140,11 @@
       "type": "workflow",
       "data": {
         "tone": "success",
-        "trigger": "always",
         "payload": {
           "mode": "all"
         },
-        "onBlocked": "wait"
+        "onBlocked": "wait",
+        "when": "always"
       }
     },
     {
@@ -153,11 +154,11 @@
       "type": "workflow",
       "data": {
         "tone": "default",
-        "trigger": "always",
         "payload": {
           "mode": "all"
         },
-        "onBlocked": "wait"
+        "onBlocked": "wait",
+        "when": "always"
       }
     },
     {
@@ -167,11 +168,11 @@
       "type": "workflow",
       "data": {
         "tone": "success",
-        "trigger": "always",
         "payload": {
           "mode": "all"
         },
-        "onBlocked": "wait"
+        "onBlocked": "wait",
+        "when": "always"
       }
     },
     {
@@ -181,11 +182,11 @@
       "type": "workflow",
       "data": {
         "tone": "default",
-        "trigger": "always",
         "payload": {
           "mode": "all"
         },
-        "onBlocked": "wait"
+        "onBlocked": "wait",
+        "when": "always"
       }
     },
     {
@@ -195,13 +196,12 @@
       "type": "workflow",
       "data": {
         "label": "pass",
-        "trigger": "condition",
-        "condition": "route == ship",
         "tone": "success",
         "payload": {
           "mode": "summary"
         },
-        "onBlocked": "wait"
+        "onBlocked": "wait",
+        "when": "ship"
       }
     },
     {
@@ -213,8 +213,6 @@
       "type": "workflow",
       "data": {
         "label": "revise",
-        "trigger": "condition",
-        "condition": "route == revise",
         "tone": "danger",
         "payload": {
           "mode": "all"
@@ -226,7 +224,8 @@
           "maxDurationMinutes": 30,
           "stopOnNoProgress": 2,
           "onExhausted": "human"
-        }
+        },
+        "when": "revise"
       }
     }
   ],

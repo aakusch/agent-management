@@ -7,6 +7,7 @@ icon: eye
 color: violet
 version: 0.1.0
 tags: bhg, verification, review, needs-review
+outcomes: pass, revise, escalate
 ---
 
 Decide whether the change satisfies the meeting request. Passing checks is not the question.

@@ -171,3 +171,14 @@ describe('serializeDocument', () => {
     expect(serializeDocument(document).endsWith('\n')).toBe(true)
   })
 })
+
+describe('componentToMarkdown outcomes', () => {
+  it('round-trips a declared outcome list', () => {
+    const gate = { ...component, kind: 'router' as const, outcomes: ['ship', 'revise', 'escalate'] }
+    expect(parseComponentMarkdown(componentToMarkdown(gate))).toEqual(gate)
+  })
+
+  it('omits the line entirely when nothing is declared', () => {
+    expect(componentToMarkdown(component)).not.toContain('outcomes:')
+  })
+})

@@ -7,6 +7,7 @@ icon: split
 color: cyan
 version: 0.1.0
 tags: bhg, routing, needs-review
+outcomes: single, monorepo, unknown
 ---
 
 Determine where this change lands.

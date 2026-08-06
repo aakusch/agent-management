@@ -1,6 +1,7 @@
 import type { ComponentTemplate, ProjectContext, RelayAssignmentBundle, WorkflowDocument, WorkflowModuleDefinition } from '../types/workflow'
 import type { CatalystDefinition, PendingRun, RunMonitorBoard, WorkflowRecord, WorkflowTemplate } from '../types/catalog'
 import { isRecord, isStringArray } from './storage'
+import { UNIVERSAL_WHEN } from '../types/workflow'
 
 const componentKinds = new Set(['agent', 'judge', 'router', 'human', 'tool', 'module', 'workflow', 'catalyst'])
 /** Kinds an author may declare. `catalyst` is a platform component and cannot be authored. */
@@ -61,6 +62,9 @@ export function isComponentTemplate(value: unknown): value is ComponentTemplate 
     && isStringArray(value.tags)
     && (value.inputs === undefined || isStringArray(value.inputs))
     && (value.outputs === undefined || isStringArray(value.outputs))
+    // A declared outcome may not shadow a universal result, or a connector could name two things.
+    && (value.outcomes === undefined || (isStringArray(value.outcomes)
+      && value.outcomes.every((name) => Boolean(name) && !UNIVERSAL_WHEN.includes(name))))
     && typeof value.instruction === 'string'
     && (value.defaults === undefined || (isRecord(value.defaults) && Object.values(value.defaults).every((item) => typeof item === 'string')))
     && (value.workflowId === undefined || typeof value.workflowId === 'string')
@@ -149,7 +153,10 @@ export function isWorkflowDocument(value: unknown): value is WorkflowDocument {
       || !nodeStatuses.has(node.data.status)
       || typeof node.data.instruction !== 'string'
       || !isRecord(node.data.overrides)
-      || !Object.values(node.data.overrides).every((item) => typeof item === 'string')) return false
+      || !Object.values(node.data.overrides).every((item) => typeof item === 'string')
+      || (node.data.outcomes !== undefined && !(isStringArray(node.data.outcomes)
+        && node.data.outcomes.every((name) => Boolean(name) && !UNIVERSAL_WHEN.includes(name))))
+      || (node.data.waitForAll !== undefined && typeof node.data.waitForAll !== 'boolean')) return false
     if (node.data.execution !== undefined && (!isRecord(node.data.execution)
       || (node.data.execution.model !== undefined && typeof node.data.execution.model !== 'string')
       || (node.data.execution.effort !== undefined && (typeof node.data.execution.effort !== 'string' || !reasoningEfforts.has(node.data.execution.effort)))
@@ -182,6 +189,16 @@ export function isWorkflowDocument(value: unknown): value is WorkflowDocument {
     if (isRecord(edge.data) && edge.data.handoff !== undefined
       && !isRecord(edge.data.handoff)
       && !['signal', 'summary', 'full'].includes(String(edge.data.handoff))) return false
+    // Why self-contained: nodes carry a copy of their component's outcomes, so a document can be
+    // checked here and by the CLI without the component library being available.
+    if (isRecord(edge.data) && edge.data.when !== undefined) {
+      const when = edge.data.when
+      if (typeof when !== 'string' || !when) return false
+      const source = value.nodes.find((node) => node.id === edge.source)
+      const declared = Array.isArray(source?.data?.outcomes) ? source.data.outcomes as string[] : []
+      const allowed = [...UNIVERSAL_WHEN, 'approved', ...declared]
+      if (!allowed.includes(when)) return false
+    }
     edgeIds.add(edge.id)
   }
 
