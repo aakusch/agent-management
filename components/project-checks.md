@@ -6,7 +6,7 @@ kind: tool
 icon: terminal
 color: amber
 version: 0.1.0
-tags: bhg, verification, needs-review
+tags: bhg, verification
 ---
 
 Run the project's own static checks, each as its own step: typecheck, lint, build.

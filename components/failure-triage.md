@@ -6,7 +6,7 @@ kind: judge
 icon: bug
 color: rose
 version: 0.1.0
-tags: bhg, verification, triage, needs-review
+tags: bhg, verification, triage
 outcomes: ours, environmental, pre-existing
 ---
 

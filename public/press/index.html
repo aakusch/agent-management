@@ -1,0 +1,461 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<title>Relay press renders</title>
+<!-- The product's own stylesheet, served live, so these renders cannot drift from the app. -->
+<link rel="stylesheet" href="/src/styles.css">
+<style>
+  html, body { width: auto; height: auto; overflow: visible; }
+  body { margin: 0; background: #eef1f3; }
+  /* One plate per render, sized exactly to its content so a screenshot needs no cropping. */
+  #plate { position: relative; background: #eef1f3; }
+  #plate.dotted { background-image: radial-gradient(#cbd3d8 1px, transparent 1px); background-size: 24px 24px; }
+  .n { position: absolute; }
+  svg.wires { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
+  .elabel {
+    position: absolute; transform: translate(-50%, -50%);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px;
+    letter-spacing: .06em; text-transform: uppercase; padding: 3px 7px; border-radius: 5px;
+    background: #fff; border: 1px solid #d9e0e5; color: #6b757f; white-space: nowrap;
+  }
+  .elabel.ship { color: #1f7a51; border-color: #b9e3cd; }
+  .elabel.escalate { color: #a8752e; border-color: #eed9b4; }
+  .elabel.revise { color: #a8752e; border-color: #eed9b4; }
+  /* the pulse that runs along a connector */
+  path.spark { filter: drop-shadow(0 0 5px currentColor); stroke-linecap: round; }
+  /* the route not taken */
+  .n.dimmed { filter: grayscale(1); }
+
+  /* a component's Markdown file, as it sits in the repository */
+  .file {
+    position: absolute; background: #fff; border: 1px solid #d9e0e5; border-radius: 10px;
+    box-shadow: 0 12px 28px rgba(39,52,61,.08); overflow: hidden;
+  }
+  .file-bar {
+    height: 30px; border-bottom: 1px solid #e9edf0; background: #f7f9fa;
+    display: flex; align-items: center; gap: 7px; padding: 0 11px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; color: #6b757f;
+  }
+  .file-bar i { width: 7px; height: 7px; border-radius: 50%; background: #d3dae0; }
+  .file-body {
+    position: relative; padding: 11px 0 13px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; line-height: 19px;
+  }
+  .file-body .ln { position: absolute; left: 14px; right: 12px; white-space: pre; color: #4c5661; }
+  .file-body .ln .k { color: #8d7ad6; }
+  .file-body .ln.rule { color: #b6c0c7; }
+  .file-body .ln.prose { color: #6b757f; }
+  /* the field on its way from the file into the card */
+  .chip {
+    position: absolute; transform: translate(-50%, -50%);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px;
+    padding: 3px 8px; border-radius: 6px; white-space: nowrap;
+    background: #f1ecff; border: 1px solid #cdbdf7; color: #6b52c4;
+  }
+</style>
+</head>
+<body>
+<div id="plate"></div>
+<script>
+const P = new URLSearchParams(location.search);
+const TARGET = P.get('t') || 'workflow';
+const FRAME = P.get('f') === null ? null : Number(P.get('f'));
+const TOTAL = Number(P.get('n') || 60);
+const plate = document.getElementById('plate');
+
+const ready = fetch('/press/assets.json').then(r => r.json()).then(A => {
+  const { icons, components: C, modules: M, kindLabel } = A;
+
+  // Node markup identical to src/components/WorkflowNode.tsx
+  function node(a, x, y, opts) {
+    const o = opts || {};
+    const kind = o.kind || a.kind;
+    const wrap = document.createElement('div');
+    wrap.className = 'n';
+    wrap.style.cssText = `left:${x}px;top:${y}px;`;
+    const composition = kind === 'module'
+      ? '<div class="module-node-composition"><i></i><span></span><i></i><span></span><i></i><em>linked graph</em></div>'
+      : '';
+    wrap.innerHTML = `<div class="workflow-node kind-${kind} tone-${o.tone || a.tone} status-${o.status || 'idle'}">
+      <div class="node-heading">
+        <span class="node-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="none"
+          stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"
+          >${icons[a.icon] || icons.bot}</svg></span>
+        <span class="node-title">${a.name}</span>
+        <span class="node-status"></span>
+      </div>
+      <p class="node-description">${o.desc === undefined ? a.desc : o.desc}</p>
+      ${composition}
+      <div class="node-meta"><span class="node-kind-badge">${kindLabel[kind] || kind}</span></div>
+    </div>`;
+    wrap.card = wrap.firstElementChild;
+    plate.appendChild(wrap);
+    return wrap;
+  }
+  const W = k => k === 'module' ? 304 : k === 'router' ? 252 : 286;
+  const H = k => k === 'router' ? 126 : 148;
+  const size = (w, h, dotted) => {
+    plate.style.width = w + 'px'; plate.style.height = h + 'px';
+    if (dotted) plate.classList.add('dotted');
+  };
+  const wires = paths => {
+    const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    s.setAttribute('class', 'wires');
+    s.innerHTML = paths;
+    plate.appendChild(s);
+    return s;
+  };
+  const label = (text, x, y, cls) => {
+    const d = document.createElement('div');
+    d.className = 'elabel ' + (cls || '');
+    d.textContent = text;
+    d.style.left = x + 'px'; d.style.top = y + 'px';
+    plate.appendChild(d);
+    return d;
+  };
+  // easing shared with the animated renders
+  const clamp = v => Math.min(1, Math.max(0, v));
+  const ease = t => t < .5 ? 4*t*t*t : 1 - Math.pow(-2*t+2, 3)/2;
+  const prog = (f, a, b) => clamp((f - a) / Math.max(1, b - a));
+
+  const PAD = 64;
+  const scenes = {
+    // ---------- a single component card ----------
+    card() {
+      size(286 + PAD * 2, 148 + PAD * 2);
+      node(C['request-verification'], PAD, PAD);
+    },
+
+    // ---------- the routed tail of Meeting to PR ----------
+    workflow() {
+      const L = {
+        verify: [PAD, PAD + 150],
+        gate:   [PAD + 430, PAD + 161],
+        ship:   [PAD + 800, PAD],
+        ask:    [PAD + 800, PAD + 330],
+      };
+      size(L.ship[0] + 304 + PAD, L.ask[1] + 148 + PAD, true);
+      const p = (a, b, tone) => {
+        const [x1, y1] = a, [x2, y2] = b;
+        const mx = (x1 + x2) / 2;
+        return `<path d="M${x1} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${x2} ${y2}" fill="none"
+          stroke="${tone}" stroke-width="2" />`;
+      };
+      wires(
+        p([L.verify[0] + 286, L.verify[1] + 74], [L.gate[0], L.gate[1] + 63], '#c3ccd3') +
+        p([L.gate[0] + 252, L.gate[1] + 45], [L.ship[0], L.ship[1] + 74], '#8fd3ae') +
+        p([L.gate[0] + 252, L.gate[1] + 81], [L.ask[0], L.ask[1] + 74], '#e0b678')
+      );
+      node(C['request-verification'], ...L.verify);
+      node(C['delivery-gate'], ...L.gate);
+      node(M['pr-handoff'], ...L.ship);
+      node(C['ask-user'], ...L.ask);
+      label('ship', (L.gate[0] + 252 + L.ship[0]) / 2, (L.gate[1] + 45 + L.ship[1] + 74) / 2, 'ship');
+      label('escalate', (L.gate[0] + 252 + L.ask[0]) / 2, (L.gate[1] + 81 + L.ask[1] + 74) / 2, 'escalate');
+    },
+
+    // ---------- a small module composition ----------
+    module() {
+      const ids = M['meeting-request'].inner;
+      const gap = 60;
+      size(286 * 3 + gap * 2 + PAD * 2, 148 + PAD * 2 + 120, true);
+      wires(
+        `<path d="M${PAD + 286} ${PAD + 74} L${PAD + 286 + gap} ${PAD + 74}" fill="none" stroke="#c3ccd3" stroke-width="2"/>` +
+        `<path d="M${PAD + 286 * 2 + gap} ${PAD + 74} L${PAD + 286 * 2 + gap * 2} ${PAD + 74}" fill="none" stroke="#c3ccd3" stroke-width="2"/>`
+      );
+      ids.forEach((id, i) => node(C[id], PAD + i * (286 + gap), PAD));
+      const bar = document.createElement('div');
+      bar.style.cssText = `position:absolute;left:${PAD}px;top:${PAD + 148 + 34}px;
+        width:${286 * 3 + gap * 2}px;height:44px;border:2px solid #cdd5dc;border-top:none;border-radius:0 0 12px 12px;`;
+      plate.appendChild(bar);
+      const cap = document.createElement('div');
+      cap.className = 'elabel';
+      cap.textContent = M['meeting-request'].name + ' · one module';
+      cap.style.cssText += `left:${PAD + (286 * 3 + gap * 2) / 2}px;top:${PAD + 148 + 78}px;`;
+      plate.appendChild(cap);
+    },
+
+    // ---------- animated: a Markdown file becomes a component ----------
+    // The text is components/request-verification.md as it actually sits in the repository. Each
+    // frontmatter field flies to the part of the card it fills, so the mapping from file to
+    // component is visible rather than asserted.
+    author(f) {
+      const VIOLET = '#a28bfa';
+      const a = C['request-verification'];
+      const PX = 56, PY = 66, PW = 474, LH = 19;
+      const CX = 704, CY = 142;
+      size(CX + 286 + PX, 448, true);
+
+      // line 0 is the first line of the file body; `key` marks a frontmatter field
+      const LINES = [
+        { t: '---', cls: 'rule' },
+        { key: 'name', v: ' Request verification' },
+        { key: 'description', v: ' Judge the diff against what' },
+        { t: '  the meeting actually asked for.' },
+        { key: 'kind', v: ' judge' },
+        { key: 'icon', v: ' eye' },
+        { key: 'outcomes', v: ' pass, revise, escalate' },
+        { t: '---', cls: 'rule' },
+        { t: '' },
+        { t: 'Decide whether the change satisfies', cls: 'prose' },
+        { t: 'the meeting request. Passing checks', cls: 'prose' },
+        { t: 'is not the question.', cls: 'prose' },
+      ];
+      const PH = 30 + 11 + LINES.length * LH + 13;
+
+      const file = document.createElement('div');
+      file.className = 'file';
+      file.style.cssText = `left:${PX}px;top:${PY}px;width:${PW}px;height:${PH}px;`;
+      file.innerHTML = `<div class="file-bar"><i></i>components/request-verification.md</div>
+        <div class="file-body">${LINES.map((l, i) =>
+          `<div class="ln ${l.cls || ''}" style="top:${11 + i * LH}px">${
+            l.key ? `<span class="k">${l.key}:</span>${l.v}` : l.t}</div>`).join('')}</div>`;
+      plate.appendChild(file);
+      const lns = [...file.querySelectorAll('.ln')];
+      const lineY = i => PY + 30 + 11 + i * LH + LH / 2;
+
+      // the guide the fields travel along
+      const svg = wires(`<path id="g" d="M${PX + PW + 14} ${CY + 74} C ${PX + PW + 90} ${CY + 74},
+        ${CX - 90} ${CY + 74}, ${CX - 14} ${CY + 74}" fill="none" stroke="#cfd7dd"
+        stroke-width="1.5" stroke-dasharray="4 5"/>`);
+      const guide = svg.querySelector('#g');
+      const guideLen = guide.getTotalLength();
+
+      const card = node(a, CX, CY, { desc: a.desc });
+      const part = {
+        icon: card.querySelector('.node-icon'),
+        title: card.querySelector('.node-title'),
+        desc: card.querySelector('.node-description'),
+        badge: card.querySelector('.node-kind-badge'),
+      };
+
+      // what the component reports -- the reason its results can be routed at all
+      const chipsOut = ['pass', 'revise', 'escalate'].map((name, i) => {
+        const d = label(name, CX + 48 + i * 92, CY + 148 + 30, i === 0 ? 'ship' : 'escalate');
+        return d;
+      });
+      const reports = label('reports', CX - 18, CY + 148 + 30, '');
+      reports.style.opacity = 0;
+
+      // The body of the file is the instruction the agent runs, so it lands too -- washing the
+      // whole card rather than filling one slot, because that is where it lives.
+      const wash = document.createElement('div');
+      wash.style.cssText = `position:absolute;left:${CX}px;top:${CY}px;width:286px;height:148px;
+        border-radius:12px;background:${VIOLET};pointer-events:none;`;
+      plate.appendChild(wash);
+
+      const N = TOTAL, at = v => v * N;
+      // one flight per field: (source lines, target point in the card, part it fills, start)
+      const FLIGHTS = [
+        { lines: [1], key: 'name', to: [CX + 100, CY + 30], part: 'title', t0: .32 },
+        { lines: [2, 3], key: 'description', to: [CX + 143, CY + 74], part: 'desc', t0: .40 },
+        { lines: [4], key: 'kind', to: [CX + 40, CY + 128], part: 'badge', t0: .48 },
+        { lines: [9, 10, 11], key: 'instruction', to: [CX + 143, CY + 74], part: null, t0: .56 },
+        { lines: [6], key: 'outcomes', to: [CX + 143, CY + 176], part: null, t0: .64 },
+      ];
+
+      // ---- the file arrives, and reads itself out line by line ----
+      const open = ease(prog(f, 0, at(.10)));
+      file.style.opacity = open;
+      file.style.transform = `translateY(${(1 - open) * 16}px)`;
+      lns.forEach((ln, i) => {
+        ln.style.opacity = prog(f, at(.06) + i * at(.012), at(.11) + i * at(.012));
+      });
+
+      // ---- the empty card, then the guide between them ----
+      const shell = ease(prog(f, at(.28), at(.36)));
+      card.style.opacity = shell;
+      card.card.style.transform = `translateY(${(1 - shell) * 12}px) scale(${.97 + .03 * shell})`;
+      guide.style.strokeDasharray = `4 5`;
+      guide.style.opacity = prog(f, at(.30), at(.38)) * .9;
+      guide.style.strokeDashoffset = guideLen * (1 - ease(prog(f, at(.30), at(.42))));
+
+      // ---- each field flies across and fills its part ----
+      let washAmount = 0;
+      FLIGHTS.forEach((fl) => {
+        const t = ease(prog(f, at(fl.t0), at(fl.t0 + .10)));
+        const from = [PX + PW - 26, lineY(fl.lines[Math.floor(fl.lines.length / 2)])];
+        const chip = document.createElement('div');
+        chip.className = 'chip';
+        chip.textContent = fl.key;
+        // eased travel with a slight lift, so five flights along one guide stay distinguishable
+        const x = from[0] + (fl.to[0] - from[0]) * t;
+        const y = from[1] + (fl.to[1] - from[1]) * t - Math.sin(t * Math.PI) * 26;
+        chip.style.cssText = `left:${x}px;top:${y}px;`;
+        // visible only in flight: 0 before it leaves, 0 once it has been absorbed
+        chip.style.opacity = (t > 0 && t < 1) ? Math.min(1, prog(f, at(fl.t0), at(fl.t0 + .02))) * (1 - prog(f, at(fl.t0 + .078), at(fl.t0 + .10))) : 0;
+        plate.appendChild(chip);
+        // the source lines pulse as the field leaves
+        const lift = prog(f, at(fl.t0), at(fl.t0 + .03)) * (1 - prog(f, at(fl.t0 + .05), at(fl.t0 + .09)));
+        fl.lines.forEach((i) => {
+          lns[i].style.background = lift > .02 ? `rgba(162,139,250,${(lift * .22).toFixed(3)})` : '';
+          lns[i].style.borderRadius = '4px';
+        });
+        if (fl.part) {
+          const land = ease(prog(f, at(fl.t0 + .08), at(fl.t0 + .14)));
+          part[fl.part].style.opacity = land;
+          part[fl.part].style.transform = `translateY(${(1 - land) * 5}px)`;
+        }
+        // the instruction has no slot of its own -- it washes through the card on arrival
+        if (fl.key === 'instruction') {
+          washAmount = prog(f, at(fl.t0 + .07), at(fl.t0 + .10)) * (1 - prog(f, at(fl.t0 + .12), at(fl.t0 + .19)));
+        }
+      });
+      wash.style.opacity = (washAmount * .16).toFixed(3);
+      // the icon lands with the name -- both name it
+      const ic = ease(prog(f, at(.40), at(.46)));
+      part.icon.style.opacity = ic;
+      part.icon.style.transform = `scale(${.7 + .3 * ic})`;
+
+      // ---- what it reports ----
+      reports.style.opacity = prog(f, at(.73), at(.79)) * .8;
+      chipsOut.forEach((d, i) => {
+        const s = ease(prog(f, at(.74) + i * at(.03), at(.80) + i * at(.03)));
+        d.style.opacity = s;
+        d.style.transform = `translate(-50%, -50%) translateY(${(1 - s) * 7}px)`;
+      });
+
+      // ---- the file recedes; the component is the artefact now ----
+      const settle = prog(f, at(.84), at(.93));
+      file.style.opacity = open * (1 - settle * .62);
+      const ring = prog(f, at(.87), at(.93)) * (1 - prog(f, at(.96), at(1)));
+      card.card.style.boxShadow = ring > .01
+        ? `0 0 0 ${(2 + ring * 3).toFixed(1)}px ${VIOLET}, 0 0 ${Math.round(10 + ring * 20)}px ${VIOLET}aa, 0 12px 28px rgba(39,52,61,.10)`
+        : '';
+      card.card.style.borderColor = ring > .01 ? VIOLET : '';
+    },
+
+    // ---------- animated: the workflow composes, then a pass runs through it ----------
+    compose(f) {
+      const TONE = { violet: '#a28bfa', cyan: '#63cadb', blue: '#70a7ff', amber: '#f0b66c', mint: '#62d79b' };
+      const L = {
+        verify: [PAD, PAD + 150],
+        gate:   [PAD + 430, PAD + 161],
+        ship:   [PAD + 800, PAD],
+        ask:    [PAD + 800, PAD + 330],
+      };
+      size(L.ship[0] + 304 + PAD, L.ask[1] + 148 + PAD, true);
+      const curve = (a, b) => {
+        const [x1, y1] = a, [x2, y2] = b, mx = (x1 + x2) / 2;
+        return `M${x1} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${x2} ${y2}`;
+      };
+      const D = {
+        w1: curve([L.verify[0] + 286, L.verify[1] + 74], [L.gate[0], L.gate[1] + 63]),
+        w2: curve([L.gate[0] + 252, L.gate[1] + 45], [L.ship[0], L.ship[1] + 74]),
+        w3: curve([L.gate[0] + 252, L.gate[1] + 81], [L.ask[0], L.ask[1] + 74]),
+      };
+      // base connector, then a bright segment that travels along the identical path
+      const svg = wires(
+        `<path id="w1" d="${D.w1}" fill="none" stroke="#c3ccd3" stroke-width="2"/>` +
+        `<path id="w2" d="${D.w2}" fill="none" stroke="#8fd3ae" stroke-width="2"/>` +
+        `<path id="w3" d="${D.w3}" fill="none" stroke="#e0b678" stroke-width="2"/>` +
+        `<path id="s1" class="spark" d="${D.w1}" fill="none" stroke="${TONE.violet}" color="${TONE.violet}" stroke-width="6" opacity="0"/>` +
+        `<path id="s2" class="spark" d="${D.w2}" fill="none" stroke="${TONE.mint}" color="${TONE.mint}" stroke-width="6" opacity="0"/>`
+      );
+      const nodes = {
+        verify: node(C['request-verification'], ...L.verify),
+        gate:   node(C['delivery-gate'], ...L.gate),
+        ship:   node(M['pr-handoff'], ...L.ship),
+        ask:    node(C['ask-user'], ...L.ask),
+      };
+      const order = ['verify', 'gate', 'ship', 'ask'];
+      const lbl = {
+        ship: label('ship', (L.gate[0] + 252 + L.ship[0]) / 2, (L.gate[1] + 45 + L.ship[1] + 74) / 2, 'ship'),
+        escalate: label('escalate', (L.gate[0] + 252 + L.ask[0]) / 2, (L.gate[1] + 81 + L.ask[1] + 74) / 2, 'escalate'),
+      };
+      const base = ['w1', 'w2', 'w3'].map(id => svg.querySelector('#' + id));
+      const baseLen = base.map(pa => pa.getTotalLength());
+      base.forEach((pa, i) => { pa.style.strokeDasharray = baseLen[i]; });
+      const sparks = ['s1', 's2'].map(id => svg.querySelector('#' + id));
+      const sparkLen = sparks.map(pa => pa.getTotalLength());
+
+      const N = TOTAL, at = v => v * N;
+      // A soft box-shadow spread is the app's own running treatment, but a 256-colour GIF cannot
+      // hold that gradient -- it quantises down to the background and the glow disappears. So the
+      // emphasis here is a crisp ring in the step's own tone, which survives quantisation exactly,
+      // with only a small soft halo behind it.
+      const glow = (n, amount, hex) => {
+        if (amount <= 0) {
+          n.card.style.boxShadow = '';
+          n.card.style.borderColor = '';
+          return;
+        }
+        const ring = (2 + amount * 3).toFixed(1);
+        const halo = Math.round(10 + amount * 20);
+        n.card.style.boxShadow =
+          `0 0 0 ${ring}px ${hex}, 0 0 ${halo}px ${hex}aa, 0 12px 28px rgba(39,52,61,.10)`;
+        n.card.style.borderColor = hex;
+      };
+      // a bright segment of length SEG travels the full path
+      const travel = (i, t) => {
+        const SEG = 110, len = sparkLen[i];
+        if (t <= 0 || t >= 1) { sparks[i].style.opacity = 0; return; }
+        sparks[i].style.opacity = 1;
+        sparks[i].style.strokeDasharray = `${SEG} ${len + SEG}`;
+        sparks[i].style.strokeDashoffset = SEG - t * (len + SEG);
+      };
+
+      // ---- part one: it composes ----
+      // The arrival alpha is kept per node because part two attenuates some of these again. A
+      // second `style.opacity =` write would replace this value rather than compose with it, and
+      // since its own factor is 0 for every early frame it would resolve to 1 -- the node would
+      // appear fully drawn from frame 0 while its neighbours were still fading in.
+      const arrive = {};
+      order.forEach((k, i) => {
+        const a = ease(prog(f, at(.02) + i * at(.05), at(.13) + i * at(.05)));
+        arrive[k] = a;
+        nodes[k].style.opacity = a;
+        nodes[k].card.style.transform = `translateY(${(1 - a) * 14}px) scale(${.96 + .04 * a})`;
+      });
+      [0, 1, 2].forEach(i => {
+        const d = ease(prog(f, at(.26) + i * at(.045), at(.36) + i * at(.045)));
+        base[i].style.strokeDashoffset = baseLen[i] * (1 - d);
+      });
+      const shipIn = prog(f, at(.40), at(.45));
+      const escalateIn = prog(f, at(.43), at(.48));
+      lbl.ship.style.opacity = shipIn;
+      lbl.escalate.style.opacity = escalateIn;
+
+      // ---- part two: a pass runs through it ----
+      // verify glows, the glow travels to the gate, the gate decides, it travels on to the
+      // handoff, and the route that was not taken greys out.
+      const gv = prog(f, at(.50), at(.56)) * (1 - prog(f, at(.62), at(.68)));
+      glow(nodes.verify, gv, TONE.violet);
+      travel(0, prog(f, at(.58), at(.68)));
+
+      const gg = prog(f, at(.66), at(.72)) * (1 - prog(f, at(.78), at(.84)));
+      glow(nodes.gate, gg, TONE.cyan);
+      travel(1, prog(f, at(.76), at(.87)));
+
+      const gs = prog(f, at(.85), at(.91));
+      glow(nodes.ship, gs, TONE.blue);
+
+      // the gate chose ship, so escalate and its target recede
+      const drop = prog(f, at(.76), at(.86));
+      nodes.ask.classList.toggle('dimmed', drop > .5);
+      nodes.ask.style.opacity = arrive.ask * (1 - drop * .62);
+      lbl.escalate.style.opacity = escalateIn * (1 - drop * .75);
+      base[2].style.opacity = 1 - drop * .7;
+      lbl.ship.style.borderColor = f >= at(.76) ? '#8fd3ae' : '';
+      lbl.ship.style.background = f >= at(.76) ? '#e7f6ee' : '';
+    },
+  };
+
+  const fn = scenes[TARGET] || scenes.workflow;
+  // Re-rendering from scratch per frame keeps every frame a pure function of `f`, so a capture
+  // loop can jump around without inheriting state from the frame before it.
+  window.setFrame = (n) => {
+    plate.className = ''; plate.innerHTML = '';
+    plate.style.cssText = '';
+    fn(n);
+    return plate.offsetWidth + 'x' + plate.offsetHeight;
+  };
+  window.setFrame(FRAME === null ? TOTAL : FRAME);
+  document.documentElement.dataset.ready = '1';
+  return { w: plate.offsetWidth, h: plate.offsetHeight };
+});
+window.__ready = ready;
+</script>
+</body>
+</html>

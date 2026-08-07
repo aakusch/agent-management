@@ -6,7 +6,7 @@ kind: tool
 icon: terminal
 color: amber
 version: 0.1.0
-tags: bhg, verification, needs-review
+tags: bhg, verification
 ---
 
 Run tests in two passes: first the tests covering the changed surface, then the full suite.

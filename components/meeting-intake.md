@@ -6,7 +6,7 @@ kind: tool
 icon: terminal
 color: blue
 version: 0.1.0
-tags: bhg, meetings, grounding, needs-review
+tags: bhg, meetings, grounding
 ---
 
 Resolve the meeting the objective refers to, then load it.

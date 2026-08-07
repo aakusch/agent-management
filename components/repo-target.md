@@ -6,7 +6,7 @@ kind: router
 icon: split
 color: cyan
 version: 0.1.0
-tags: bhg, routing, needs-review
+tags: bhg, routing
 outcomes: single, monorepo, unknown
 ---
 

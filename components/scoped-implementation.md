@@ -6,7 +6,7 @@ kind: agent
 icon: wand
 color: mint
 version: 0.1.0
-tags: bhg, implementation, needs-review
+tags: bhg, implementation
 ---
 
 Implement the planned change.

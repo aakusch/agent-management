@@ -6,7 +6,7 @@ kind: tool
 icon: shield
 color: coral
 version: 0.1.0
-tags: bhg, safety, git, needs-review
+tags: bhg, safety, git
 ---
 
 Make the repository safe to work in before anything is changed.

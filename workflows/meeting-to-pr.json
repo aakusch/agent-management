@@ -42,7 +42,8 @@
     }
   },
   "entry": {
-    "mode": "manual"
+    "mode": "catalyst",
+    "nodeId": "catalyst-mshs3x40g"
   },
   "specification": {
     "enabled": true,
@@ -60,8 +61,8 @@
       "id": "request",
       "type": "workflow",
       "position": {
-        "x": 0,
-        "y": 216
+        "x": 216,
+        "y": 0
       },
       "data": {
         "label": "Meeting request",
@@ -82,86 +83,15 @@
       }
     },
     {
-      "id": "preflight",
-      "type": "workflow",
-      "position": {
-        "x": 384,
-        "y": 216
-      },
-      "data": {
-        "label": "Repository preflight",
-        "description": "Pick the repository, preserve uncommitted work, branch off develop, learn the conventions.",
-        "templateId": "module-repo-preflight",
-        "kind": "module",
-        "icon": "layers",
-        "color": "coral",
-        "status": "idle",
-        "instruction": "",
-        "overrides": {},
-        "execution": {},
-        "module": {
-          "moduleId": "repo-preflight",
-          "version": "0.1.0",
-          "mode": "linked"
-        }
-      }
-    },
-    {
-      "id": "implement",
-      "type": "workflow",
-      "position": {
-        "x": 768,
-        "y": 216
-      },
-      "data": {
-        "label": "Scoped implementation",
-        "description": "Implement exactly the planned change \u2014 nothing adjacent.",
-        "templateId": "scoped-implementation",
-        "kind": "agent",
-        "icon": "wand",
-        "color": "mint",
-        "status": "idle",
-        "instruction": "",
-        "overrides": {},
-        "execution": {},
-        "waitForAll": true
-      }
-    },
-    {
-      "id": "verify",
-      "type": "workflow",
-      "position": {
-        "x": 1152,
-        "y": 216
-      },
-      "data": {
-        "label": "Verify and repair",
-        "description": "Typecheck, lint, build, tests. Each failure routes to one minimal repair, bounded to three passes.",
-        "templateId": "module-verify-and-repair",
-        "kind": "module",
-        "icon": "layers",
-        "color": "amber",
-        "status": "idle",
-        "instruction": "",
-        "overrides": {},
-        "execution": {},
-        "module": {
-          "moduleId": "verify-and-repair",
-          "version": "0.1.0",
-          "mode": "linked"
-        }
-      }
-    },
-    {
       "id": "judge",
       "type": "workflow",
       "position": {
-        "x": 1536,
-        "y": 216
+        "x": 1560,
+        "y": 264
       },
       "data": {
         "label": "Request verification",
-        "description": "Does the diff satisfy what the meeting asked for? Evidence, not vibes.",
+        "description": "Does the diff satisfy what the meeting asked for? ",
         "templateId": "request-verification",
         "kind": "judge",
         "icon": "eye",
@@ -182,7 +112,7 @@
       "type": "workflow",
       "position": {
         "x": 1920,
-        "y": 216
+        "y": 408
       },
       "data": {
         "label": "Delivery gate",
@@ -206,8 +136,8 @@
       "id": "deliver",
       "type": "workflow",
       "position": {
-        "x": 2304,
-        "y": 216
+        "x": 2352,
+        "y": 288
       },
       "data": {
         "label": "PR handoff",
@@ -231,12 +161,12 @@
       "id": "escalate",
       "type": "workflow",
       "position": {
-        "x": 1920,
-        "y": 432
+        "x": 2376,
+        "y": 528
       },
       "data": {
         "label": "Ask user",
-        "description": "Bounded loop exhausted, or the call is Aaron\u2019s to make.",
+        "description": "Bounded loop exhausted, or escalate decision to user",
         "templateId": "ask-user",
         "kind": "human",
         "icon": "user-check",
@@ -246,62 +176,39 @@
         "overrides": {},
         "execution": {}
       }
+    },
+    {
+      "id": "catalyst-mshs3x40g",
+      "type": "workflow",
+      "position": {
+        "x": -120,
+        "y": 0
+      },
+      "data": {
+        "label": "Catalyst",
+        "description": "When a meeting ends",
+        "templateId": "catalyst",
+        "kind": "catalyst",
+        "icon": "zap",
+        "color": "amber",
+        "status": "idle",
+        "instruction": "",
+        "overrides": {},
+        "execution": {},
+        "catalyst": {}
+      }
     }
   ],
   "edges": [
-    {
-      "id": "request-preflight",
-      "source": "request",
-      "target": "preflight",
-      "type": "workflow",
-      "data": {
-        "handoff": "full",
-        "tone": "default",
-        "when": "always"
-      }
-    },
-    {
-      "id": "preflight-implement",
-      "source": "preflight",
-      "target": "implement",
-      "type": "workflow",
-      "data": {
-        "handoff": "full",
-        "tone": "default",
-        "when": "always"
-      }
-    },
-    {
-      "id": "implement-verify",
-      "source": "implement",
-      "target": "verify",
-      "type": "workflow",
-      "data": {
-        "handoff": "full",
-        "tone": "default",
-        "when": "always"
-      }
-    },
-    {
-      "id": "verify-judge",
-      "source": "verify",
-      "target": "judge",
-      "type": "workflow",
-      "data": {
-        "handoff": "full",
-        "tone": "default",
-        "when": "always"
-      }
-    },
     {
       "id": "judge-gate",
       "source": "judge",
       "target": "gate",
       "type": "workflow",
       "data": {
-        "handoff": "summary",
         "tone": "default",
-        "when": "always"
+        "when": "always",
+        "handoff": "summary"
       }
     },
     {
@@ -310,32 +217,11 @@
       "target": "deliver",
       "type": "workflow",
       "data": {
-        "handoff": "full",
         "tone": "success",
         "label": "ship",
-        "when": "ship"
+        "when": "ship",
+        "handoff": "full"
       }
-    },
-    {
-      "id": "gate-implement",
-      "source": "gate",
-      "target": "implement",
-      "type": "workflow",
-      "data": {
-        "handoff": "full",
-        "tone": "danger",
-        "label": "revise",
-        "loop": {
-          "mode": "bounded",
-          "maxIterations": 3,
-          "maxDurationMinutes": 90,
-          "stopOnNoProgress": 2,
-          "onExhausted": "human"
-        },
-        "when": "revise"
-      },
-      "sourceHandle": "source-bottom",
-      "targetHandle": "target-bottom"
     },
     {
       "id": "gate-escalate",
@@ -343,12 +229,30 @@
       "target": "escalate",
       "type": "workflow",
       "data": {
-        "handoff": "summary",
         "tone": "warning",
         "label": "escalate",
-        "when": "escalate"
+        "when": "escalate",
+        "handoff": "summary"
+      }
+    },
+    {
+      "type": "workflow",
+      "source": "catalyst-mshs3x40g",
+      "sourceHandle": "source-right",
+      "target": "request",
+      "targetHandle": "target-left",
+      "id": "edge-mshs48b5h",
+      "markerEnd": {
+        "type": "arrowclosed",
+        "width": 16,
+        "height": 16
+      },
+      "data": {
+        "tone": "default",
+        "when": "always",
+        "handoff": "summary"
       }
     }
   ],
-  "updatedAt": "2026-08-04T04:17:40.326953Z"
+  "updatedAt": "2026-08-06T17:23:19.678Z"
 }

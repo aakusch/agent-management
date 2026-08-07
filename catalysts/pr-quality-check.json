@@ -1,0 +1,22 @@
+{
+  "id": "pr-quality-check",
+  "name": "PR quality check",
+  "kind": "connector-event",
+  "workflowId": "catalyst-smoke",
+  "workflowName": "Catalyst smoke",
+  "selector": "github.pull_request.opened",
+  "settings": {
+    "provider": "github",
+    "webhookEvent": "pull_request.opened",
+    "connector": "github",
+    "connectorEvent": "pull_request.opened",
+    "frequency": "weekdays",
+    "time": "09:00",
+    "timezone": "America/New_York",
+    "request": "repository-audit",
+    "scope": "workspace"
+  },
+  "security": "connector-oauth",
+  "status": "awaiting-runner",
+  "createdAt": "2026-08-04T06:02:58.238Z"
+}

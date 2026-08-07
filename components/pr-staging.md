@@ -6,7 +6,7 @@ kind: tool
 icon: file-check
 color: blue
 version: 0.1.0
-tags: bhg, delivery, git, needs-review
+tags: bhg, delivery, git
 ---
 
 Stage the change for review. Do not merge.
@@ -17,5 +17,5 @@ Stage the change for review. Do not merge.
    in one sentence, the quotes it came from, what changed by file, the exact verification commands and
    their results, and anything deliberately left out.
 
-Reserved for Aaron: merging, releasing, publishing, and any push to a public repository. Stop after
+Reserved for user: merging, releasing, publishing, and any push to a public repository. Stop after
 the PR exists and report its URL.

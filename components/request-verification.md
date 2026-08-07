@@ -6,7 +6,7 @@ kind: judge
 icon: eye
 color: violet
 version: 0.1.0
-tags: bhg, verification, review, needs-review
+tags: bhg, verification, review
 outcomes: pass, revise, escalate
 ---
 

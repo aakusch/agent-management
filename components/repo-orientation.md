@@ -6,7 +6,7 @@ kind: agent
 icon: scan
 color: blue
 version: 0.1.0
-tags: bhg, grounding, needs-review
+tags: bhg, grounding
 ---
 
 Orient in the repository before writing anything.

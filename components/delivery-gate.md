@@ -6,7 +6,7 @@ kind: router
 icon: split
 color: cyan
 version: 0.1.0
-tags: bhg, gate, needs-review
+tags: bhg, gate
 outcomes: ship, revise, escalate
 ---
 

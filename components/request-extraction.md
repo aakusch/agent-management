@@ -6,7 +6,7 @@ kind: agent
 icon: scan
 color: violet
 version: 0.1.0
-tags: bhg, meetings, scoping, needs-review
+tags: bhg, meetings, scoping
 ---
 
 From the loaded meeting, extract the change request the objective points at.

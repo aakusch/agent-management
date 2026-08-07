@@ -5,8 +5,7 @@
   "description": "Run every check independently and route each failure to one minimal, bounded repair.",
   "tags": [
     "bhg",
-    "verification",
-    "needs-review"
+    "verification"
   ],
   "nodes": [
     {

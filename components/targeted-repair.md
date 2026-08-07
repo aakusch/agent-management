@@ -6,7 +6,7 @@ kind: agent
 icon: wand
 color: mint
 version: 0.1.0
-tags: bhg, implementation, repair, needs-review
+tags: bhg, implementation, repair
 ---
 
 Apply exactly the fix triage named — nothing more.

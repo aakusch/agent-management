@@ -6,7 +6,7 @@ kind: human
 icon: user-check
 color: amber
 version: 0.1.0
-tags: bhg, gate, human, needs-review
+tags: bhg, gate, human
 ---
 
 Ask the open questions and wait.

@@ -6,7 +6,7 @@ kind: agent
 icon: file-check
 color: violet
 version: 0.1.0
-tags: bhg, handoff, reporting, needs-review
+tags: bhg, handoff, reporting
 ---
 
 Write the closing brief for Aaron.

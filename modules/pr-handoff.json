@@ -5,8 +5,7 @@
   "description": "Open the PR against the base branch and hand back an evidence-backed brief.",
   "tags": [
     "bhg",
-    "delivery",
-    "needs-review"
+    "delivery"
   ],
   "nodes": [
     {
